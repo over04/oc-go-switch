@@ -1,0 +1,12 @@
+services:
+  oc-go-switch:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: oc-go-switch:latest
+    container_name: oc-go-switch
+    ports:
+      - "8180:8180"
+    volumes:
+      - ./config.yaml:/config.yaml:ro
+    restart: unless-stopped
