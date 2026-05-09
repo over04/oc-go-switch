@@ -153,8 +153,7 @@ pub struct ConfigResponse {
     pub listen: String,
     pub refresh_interval_secs: u64,
     pub max_retries: usize,
-    pub selection: crate::config::SelectionConfig,
-    pub upstream: crate::config::UpstreamConfig,
+    pub go: crate::config::GoConfig,
     pub accounts: Vec<AccountListEntry>,
 }
 
@@ -162,7 +161,6 @@ pub struct ConfigResponse {
 pub struct UpdateConfigRequest {
     pub refresh_interval_secs: Option<u64>,
     pub max_retries: Option<usize>,
-    pub selection: Option<crate::config::SelectionConfig>,
 }
 
 /// GET /api/config — full config with masked auth
@@ -173,8 +171,7 @@ pub async fn get_config(State(handle): State<KeyPoolHandle>) -> Json<ConfigRespo
         listen: config.listen.clone(),
         refresh_interval_secs: config.refresh_interval_secs,
         max_retries: config.max_retries,
-        selection: config.selection,
-        upstream: config.upstream.clone(),
+        go: config.go.clone(),
         accounts: config
             .accounts
             .iter()
@@ -200,9 +197,6 @@ pub async fn update_config(
         }
         if let Some(v) = req.max_retries {
             config.max_retries = v;
-        }
-        if let Some(v) = req.selection {
-            config.selection = v;
         }
         save_config(&config)?;
     }

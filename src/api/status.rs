@@ -11,7 +11,16 @@ pub struct PoolStatusResponse {
     pub available_keys: usize,
     pub depleted_keys: usize,
     pub current_key_id: Option<String>,
+    pub last_refresh_at: Option<String>,
+    pub depleted_key_list: Vec<DepletedKeyInfo>,
     pub accounts: Vec<AccountStatus>,
+}
+
+#[derive(Debug, Serialize)]
+pub struct DepletedKeyInfo {
+    pub id: String,
+    pub masked: String,
+    pub workspace_name: String,
 }
 
 #[derive(Debug, Serialize)]
@@ -100,11 +109,24 @@ pub async fn pool_status(State(handle): State<KeyPoolHandle>) -> Json<PoolStatus
     let total = pool.keys.len();
     let depleted = pool.keys.iter().filter(|k| k.depleted).count();
 
+    let depleted_key_list: Vec<DepletedKeyInfo> = pool
+        .keys
+        .iter()
+        .filter(|k| k.depleted)
+        .map(|k| DepletedKeyInfo {
+            id: k.id.clone(),
+            masked: k.masked_key(),
+            workspace_name: k.workspace_name.clone(),
+        })
+        .collect();
+
     Json(PoolStatusResponse {
         total_keys: total,
         available_keys: total - depleted,
         depleted_keys: depleted,
         current_key_id: current_id,
+        last_refresh_at: pool.last_refresh_at.clone(),
+        depleted_key_list,
         accounts,
     })
 }

@@ -1,6 +1,7 @@
 use std::collections::HashMap;
 use std::sync::Arc;
 
+use chrono::Utc;
 use tokio::sync::RwLock;
 use tracing::{error, info, warn};
 
@@ -10,8 +11,6 @@ use crate::model::LogEntry;
 use crate::opencode::client::OpencodeClient;
 use crate::opencode::types::SubscriptionPlan;
 
-use crate::config::SortBy;
-
 use super::key::PoolKey;
 use super::selector::StickyKeySelector;
 
@@ -20,7 +19,7 @@ use super::selector::StickyKeySelector;
 /// 1. Only Go-subscribed, non-depleted keys
 /// 2. At most 1 key per workspace (highest balance)
 /// 3. Sort by balance desc
-fn pick_best_key_id(keys: &[PoolKey], sort_by: SortBy) -> Option<String> {
+fn pick_best_key_id(keys: &[PoolKey]) -> Option<String> {
     // Group by workspace_id, pick best (highest balance) per workspace
     let mut best_per_ws: HashMap<&str, &PoolKey> = HashMap::new();
     for k in keys.iter().filter(|k| !k.depleted && k.subscribed) {
@@ -35,9 +34,7 @@ fn pick_best_key_id(keys: &[PoolKey], sort_by: SortBy) -> Option<String> {
         return None;
     }
 
-    candidates.sort_by(|a, b| match sort_by {
-        SortBy::BalanceDesc => b.balance_cents.cmp(&a.balance_cents),
-    });
+    candidates.sort_by(|a, b| b.balance_cents.cmp(&a.balance_cents));
 
     Some(candidates[0].id.clone())
 }
@@ -46,6 +43,7 @@ fn pick_best_key_id(keys: &[PoolKey], sort_by: SortBy) -> Option<String> {
 pub struct KeyPool {
     pub keys: Vec<PoolKey>,
     pub selector: StickyKeySelector,
+    pub last_refresh_at: Option<String>,
 }
 
 #[derive(Debug, Clone)]
@@ -53,6 +51,7 @@ pub struct KeyPoolHandle {
     pub(crate) inner: Arc<RwLock<KeyPool>>,
     pub(crate) config: Arc<RwLock<Config>>,
     pub log_store: Arc<LogStore>,
+    pub http_client: reqwest::Client,
 }
 
 impl KeyPoolHandle {
@@ -184,6 +183,7 @@ pub async fn discover(config: &Config) -> anyhow::Result<KeyPool> {
     Ok(KeyPool {
         keys: all_keys,
         selector: StickyKeySelector::new(),
+        last_refresh_at: None,
     })
 }
 
@@ -192,18 +192,19 @@ pub fn make_handle(
     config: Arc<RwLock<Config>>,
     log_store: Arc<LogStore>,
 ) -> KeyPoolHandle {
+    let http_client = reqwest::Client::new();
     KeyPoolHandle {
         inner: Arc::new(RwLock::new(pool)),
         config,
         log_store,
+        http_client,
     }
 }
 
 impl KeyPoolHandle {
     /// Select a key (sticky), returning a clone of the selected PoolKey.
+    /// Triggers an immediate pool refresh when all keys are exhausted.
     pub async fn select_key(&self) -> Option<PoolKey> {
-        let sort_by = self.config.read().await.selection.sort_by;
-
         // First, check if the current sticky key is still valid (read lock)
         {
             let pool = self.inner.read().await;
@@ -215,18 +216,62 @@ impl KeyPoolHandle {
             }
         }
 
-        // Need to pick a new key
+        // Try to pick a new best key
+        if let Some(key) = self.pick_and_set_key().await {
+            return Some(key);
+        }
+
+        // No available key — trigger immediate refresh and retry
+        if self.trigger_refresh().await {
+            return self.pick_and_set_key().await;
+        }
+
+        None
+    }
+
+    /// Pick best key and update selector. Returns the selected key.
+    async fn pick_and_set_key(&self) -> Option<PoolKey> {
         let picked_id: Option<String> = {
             let pool = self.inner.read().await;
-            pick_best_key_id(&pool.keys, sort_by)
+            pick_best_key_id(&pool.keys)
         };
 
         if let Some(ref id) = picked_id {
             let mut pool = self.inner.write().await;
             pool.selector.set_current(id.clone());
-            pool.keys.iter().find(|k| &k.id == id).cloned()
-        } else {
-            None
+            return pool.keys.iter().find(|k| &k.id == id).cloned();
+        }
+
+        None
+    }
+
+    /// Trigger an immediate pool refresh (e.g. when all keys are exhausted).
+    /// Returns true if the refresh succeeded.
+    pub async fn trigger_refresh(&self) -> bool {
+        let config_guard = self.config.read().await;
+        match discover(&config_guard).await {
+            Ok(mut new_pool) => {
+                drop(config_guard);
+                let best_id = pick_best_key_id(&new_pool.keys);
+                new_pool.selector = super::selector::StickyKeySelector::new();
+                if let Some(ref id) = best_id {
+                    new_pool.selector.set_current(id.clone());
+                }
+                let now = Utc::now().to_rfc3339();
+                new_pool.last_refresh_at = Some(now);
+                let count = new_pool.keys.len();
+                let mut pool = self.inner.write().await;
+                *pool = new_pool;
+                info!(
+                    "trigger_refresh: pool refreshed, {} key(s) available",
+                    count
+                );
+                true
+            }
+            Err(e) => {
+                error!("trigger_refresh: discover failed: {e}");
+                false
+            }
         }
     }
 

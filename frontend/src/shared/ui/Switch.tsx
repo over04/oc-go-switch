@@ -25,19 +25,16 @@ export function Switch({
       disabled={disabled}
       onClick={() => onChange(!checked)}
       className={clsx(
-        "relative inline-flex shrink-0 rounded-full transition-colors",
-        "focus:outline-none focus-visible:ring-1 focus-visible:ring-blue-400",
-        trackH,
-        trackW,
-        checked
-          ? "bg-blue-600"
-          : "bg-gray-300 dark:bg-gray-600",
+        "relative inline-flex shrink-0 rounded-full transition-all duration-200",
+        "focus:outline-none focus-visible:ring-[3px] focus-visible:ring-terra-500/15",
+        trackH, trackW,
+        checked ? "bg-terra-500" : "bg-cream-400",
         disabled && "opacity-40 cursor-not-allowed",
       )}
     >
       <span
         className={clsx(
-          "absolute top-0.5 rounded-full bg-white shadow transition-transform",
+          "absolute top-0.5 rounded-full bg-white shadow-sm transition-transform duration-200",
           thumb,
           checked ? "translate-x-[14px]" : "translate-x-0.5",
         )}

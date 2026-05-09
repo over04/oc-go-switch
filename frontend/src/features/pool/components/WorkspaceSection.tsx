@@ -9,9 +9,9 @@ interface WorkspaceSectionProps {
 
 export function WorkspaceSection({ workspace }: WorkspaceSectionProps) {
   return (
-    <div className="mb-2.5 last:mb-0">
-      <div className="flex items-center gap-1.5 mb-1.5">
-        <span className="text-2xs font-medium text-gray-700 dark:text-gray-200">
+    <div className="bg-cream-50/50 rounded-mcm px-4 py-3 border border-cream-100">
+      <div className="flex items-center gap-2 mb-2.5">
+        <span className="text-xs font-semibold text-espresso-700">
           {workspace.name}
         </span>
         {workspace.subscribed ? (
@@ -20,8 +20,9 @@ export function WorkspaceSection({ workspace }: WorkspaceSectionProps) {
           <Badge size="xs" tone="default">-</Badge>
         )}
       </div>
+
       {workspace.go_usage && (
-        <div className="space-y-0.5 mb-1.5 px-1">
+        <div className="space-y-1.5 mb-2.5">
           <UsageBar
             label="小时"
             percent={workspace.go_usage.hourly_percent}
@@ -39,7 +40,8 @@ export function WorkspaceSection({ workspace }: WorkspaceSectionProps) {
           />
         </div>
       )}
-      <div className="space-y-px">
+
+      <div className="space-y-1">
         {workspace.keys.map((k) => (
           <KeyRow key={k.id} keyEntry={k} />
         ))}

@@ -9,6 +9,12 @@ export default defineConfig({
       "@": path.resolve(__dirname, "src"),
     },
   },
+  server: {
+    proxy: {
+      "/pool": "http://localhost:8180",
+      "/api": "http://localhost:8180",
+    },
+  },
   build: {
     outDir: "dist",
     emptyOutDir: true,

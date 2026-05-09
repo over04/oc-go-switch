@@ -11,6 +11,7 @@ use std::sync::Arc;
 
 use api::logs::LogStore;
 use api::router::build_router;
+use chrono::Utc;
 use pool::pool::{discover, make_handle};
 use tokio::sync::RwLock;
 use tracing::{error, info};
@@ -75,6 +76,7 @@ async fn main() {
                                 k.depleted = true;
                             }
                         }
+                        new_pool.last_refresh_at = Some(Utc::now().to_rfc3339());
                         *pool = new_pool;
                         info!("Background refresh complete");
                     }

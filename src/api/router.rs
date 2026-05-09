@@ -19,8 +19,9 @@ struct FrontendAssets;
 
 pub fn build_router(pool_handle: KeyPoolHandle) -> Router {
     let api_routes = Router::new()
-        .route("/v1/chat/completions", post(openai::chat_completions))
-        .route("/v1/messages", post(claude::messages))
+        .route("/go/v1/chat/completions", post(openai::chat_completions))
+        .route("/go/v1/messages", post(claude::messages))
+        .route("/go/v1/models", get(models::list_models_v1))
         .route("/pool/status", get(status::pool_status))
         .route("/health", get(status::health))
         // Account management

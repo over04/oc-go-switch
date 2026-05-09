@@ -1,4 +1,5 @@
 import clsx from "clsx";
+import { motion } from "framer-motion";
 
 interface HealthDotProps {
   healthy: boolean;
@@ -6,11 +7,24 @@ interface HealthDotProps {
 
 export function HealthDot({ healthy }: HealthDotProps) {
   return (
-    <span
-      className={clsx(
-        "w-2 h-2 rounded-full inline-block shrink-0",
-        healthy ? "bg-green-500" : "bg-red-500",
-      )}
-    />
+    <div className="flex items-center gap-1.5">
+      <motion.span
+        className={clsx(
+          "relative flex h-2 w-2",
+        )}
+        animate={{ opacity: healthy ? [0.5, 1, 0.5] : 1 }}
+        transition={healthy ? { repeat: Infinity, duration: 2 } : {}}
+      >
+        <span
+          className={clsx(
+            "inline-flex h-full w-full rounded-full",
+            healthy ? "bg-harvest-500" : "bg-terra-400",
+          )}
+        />
+      </motion.span>
+      <span className="text-[0.625rem] text-espresso-400 font-medium uppercase tracking-wider">
+        {healthy ? "在线" : "离线"}
+      </span>
+    </div>
   );
 }

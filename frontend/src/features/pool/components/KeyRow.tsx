@@ -8,9 +8,9 @@ interface KeyRowProps {
 
 export function KeyRow({ keyEntry }: KeyRowProps) {
   return (
-    <div className="flex items-center justify-between py-1 px-2 rounded bg-gray-50 dark:bg-gray-800/50">
-      <div className="flex items-center gap-1.5 min-w-0">
-        <code className="text-2xs text-gray-500 dark:text-gray-400 font-mono truncate">
+    <div className="flex items-center justify-between py-1.5 px-3 rounded-full bg-white border border-cream-100">
+      <div className="flex items-center gap-2 min-w-0">
+        <code className="text-xs text-espresso-600 font-mono truncate">
           {keyEntry.masked}
         </code>
         <CopyButton value={keyEntry.id} />

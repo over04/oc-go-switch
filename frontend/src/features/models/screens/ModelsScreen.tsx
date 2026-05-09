@@ -1,6 +1,6 @@
 import { useState, useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { motion } from "framer-motion";
+import { motion, AnimatePresence } from "framer-motion";
 import { Button } from "@/shared/ui/Button";
 import { Input } from "@/shared/ui/Input";
 import { Skeleton } from "@/shared/ui/Skeleton";
@@ -17,60 +17,148 @@ export function ModelsScreen() {
   const [tab, setTab] = useState<Tab>("openai");
   const [search, setSearch] = useState("");
 
-  const openaiQuery = useQuery({ queryKey: ["models", "openai"], queryFn: getOpenaiModels, staleTime: 300_000 });
-  const claudeQuery = useQuery({ queryKey: ["models", "claude"], queryFn: getClaudeModels, staleTime: 300_000 });
+  const openaiQuery = useQuery({
+    queryKey: ["models", "openai"],
+    queryFn: getOpenaiModels,
+    staleTime: 300_000,
+  });
+  const claudeQuery = useQuery({
+    queryKey: ["models", "claude"],
+    queryFn: getClaudeModels,
+    staleTime: 300_000,
+  });
 
   const activeQuery = tab === "openai" ? openaiQuery : claudeQuery;
   const result = activeQuery.data;
 
   const filtered = useMemo(() => {
     if (!result || isError(result)) return [];
-    return result.data.filter((m) => m.id.toLowerCase().includes(search.toLowerCase()));
+    return result.data.filter((m) =>
+      m.id.toLowerCase().includes(search.toLowerCase()),
+    );
   }, [result, search]);
 
-  const errMsg: string | null =
-    activeQuery.isError ? (activeQuery.error instanceof Error ? activeQuery.error.message : "请求失败")
-    : result && isError(result) ? result.error
-    : null;
+  const errMsg: string | null = activeQuery.isError
+    ? activeQuery.error instanceof Error
+      ? activeQuery.error.message
+      : "请求失败"
+    : result && isError(result)
+      ? result.error
+      : null;
+
+  const providerLabel = tab === "openai" ? "OpenAI 协议" : "Claude 协议";
+  const providerIcon = tab === "openai" ? "◈" : "◆";
 
   return (
-    <div>
-      <h2 className="text-sm font-semibold mb-3">模型列表</h2>
-
-      <div className="flex items-center gap-2 mb-3">
-        <Button size="xs" tone={tab === "openai" ? "primary" : "default"} onClick={() => setTab("openai")}>OpenAI 协议</Button>
-        <Button size="xs" tone={tab === "claude" ? "primary" : "default"} onClick={() => setTab("claude")}>Claude 协议</Button>
+    <div className="max-w-5xl space-y-5">
+      {/* Header */}
+      <div className="flex items-center gap-3">
+        <div className="w-1 h-6 bg-sky-400 rounded-full" />
+        <h2 className="text-lg font-semibold text-espresso-700 tracking-tight">
+          模型列表
+        </h2>
       </div>
 
-      <Input placeholder="搜索模型 ID..." value={search} onChange={(e) => setSearch(e.target.value)} className="max-w-[240px] mb-3" />
+      {/* Tab switcher — pill-style */}
+      <div className="flex items-center gap-2">
+        <div className="flex items-center bg-cream-100 rounded-full p-0.5">
+          <button
+            onClick={() => setTab("openai")}
+            className={`px-4 py-1.5 text-sm rounded-full font-medium transition-all duration-200 ${
+              tab === "openai"
+                ? "bg-white text-espresso-700 shadow-sm"
+                : "text-espresso-400 hover:text-espresso-600"
+            }`}
+          >
+            OpenAI
+          </button>
+          <button
+            onClick={() => setTab("claude")}
+            className={`px-4 py-1.5 text-sm rounded-full font-medium transition-all duration-200 ${
+              tab === "claude"
+                ? "bg-white text-espresso-700 shadow-sm"
+                : "text-espresso-400 hover:text-espresso-600"
+            }`}
+          >
+            Claude
+          </button>
+        </div>
+      </div>
 
-      {activeQuery.isPending ? <Skeleton className="h-64" /> : errMsg ? (
-        <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }}
-          className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg px-4 py-3">
-          <p className="text-xs text-red-600 dark:text-red-400 font-medium">上游模型列表不可用</p>
-          <p className="text-xs text-red-500 dark:text-red-400 mt-1 font-mono">{errMsg}</p>
+      {/* Search */}
+      <Input
+        placeholder="搜索模型 ID..."
+        value={search}
+        onChange={(e) => setSearch(e.target.value)}
+        className="max-w-[280px]"
+      />
+
+      {/* Content */}
+      {activeQuery.isPending ? (
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+          {[1, 2, 3, 4, 5, 6].map((i) => (
+            <Skeleton key={i} className="h-20" />
+          ))}
+        </div>
+      ) : errMsg ? (
+        <motion.div
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          className="bg-terra-400/5 border border-terra-400/15 rounded-mcm-lg px-5 py-4"
+        >
+          <p className="text-sm font-medium text-terra-400">
+            上游模型列表不可用
+          </p>
+          <p className="text-xs text-terra-400/70 mt-1 font-mono">{errMsg}</p>
         </motion.div>
       ) : (
-        <div className="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 overflow-hidden">
-          <table className="w-full">
-            <thead>
-              <tr className="border-b border-gray-100 dark:border-gray-700">
-                <th className="px-3 py-2 text-left text-xs font-medium text-gray-400">模型 ID</th>
-                <th className="px-3 py-2 text-left text-xs font-medium text-gray-400">提供商</th>
-              </tr>
-            </thead>
-            <tbody>
+        <>
+          <p className="text-xs text-espresso-400">
+            {providerIcon} {providerLabel} · {filtered.length} 个模型
+          </p>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+            <AnimatePresence>
               {filtered.map((m, i) => (
-                <motion.tr key={m.id} initial={{ opacity: 0, y: -4 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: i * 0.02 }}
-                  className="border-b border-gray-50 dark:border-gray-800/50 last:border-0">
-                  <td className="px-3 py-2 text-xs font-mono text-gray-700 dark:text-gray-200">{m.id}</td>
-                  <td className="px-3 py-2 text-xs text-gray-500">{m.owned_by}</td>
-                </motion.tr>
+                <motion.div
+                  key={m.id}
+                  initial={{ opacity: 0, y: 8 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ delay: i * 0.02, duration: 0.25 }}
+                  whileHover={{ y: -2 }}
+                  className="bg-white rounded-mcm-lg border border-cream-200 shadow-mcm px-4 py-3.5 transition-shadow duration-200 hover:shadow-mcm-md"
+                >
+                  <div className="flex items-start justify-between">
+                    <div className="min-w-0 flex-1">
+                      <p className="text-sm font-medium text-espresso-700 font-mono truncate">
+                        {m.id}
+                      </p>
+                      <p className="text-xs text-espresso-400 mt-1">
+                        {m.owned_by}
+                      </p>
+                    </div>
+                    <span className="text-lg text-cream-300 shrink-0 ml-2">
+                      {providerIcon}
+                    </span>
+                  </div>
+                </motion.div>
               ))}
-            </tbody>
-          </table>
-          {filtered.length === 0 && <p className="text-xs text-gray-400 text-center py-8">无匹配结果</p>}
-        </div>
+            </AnimatePresence>
+          </div>
+
+          {filtered.length === 0 && (
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              className="text-center py-12"
+            >
+              <div className="w-14 h-14 mx-auto rounded-full bg-cream-100 flex items-center justify-center mb-3">
+                <span className="text-xl text-espresso-300">◇</span>
+              </div>
+              <p className="text-sm text-espresso-500">无匹配模型</p>
+            </motion.div>
+          )}
+        </>
       )}
     </div>
   );

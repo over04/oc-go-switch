@@ -5,83 +5,158 @@ import { StatCard } from "../components/StatCard";
 import { GoUsageOverview } from "../components/GoUsageOverview";
 import { Skeleton } from "@/shared/ui/Skeleton";
 
-const container = {
-  hidden: { opacity: 0 },
-  show: { opacity: 1, transition: { staggerChildren: 0.06 } },
-};
-
 export function DashboardScreen() {
   const { data, isPending, isError, dataUpdatedAt } = usePoolStatus();
 
   if (isPending) {
     return (
-      <div className="space-y-4">
-        <div className="grid grid-cols-4 gap-3">
-          {[1, 2, 3, 4].map((i) => (
-            <Skeleton key={i} className="h-16" />
-          ))}
+      <div className="space-y-6">
+        <div className="grid grid-cols-[1.5fr_1fr_1fr_1fr] gap-4">
+          <Skeleton className="h-28" />
+          <Skeleton className="h-28" />
+          <Skeleton className="h-28" />
+          <Skeleton className="h-28" />
         </div>
-        <Skeleton className="h-32" />
+        <Skeleton className="h-40" />
       </div>
     );
   }
 
   if (isError || !data) {
     return (
-      <motion.p
+      <motion.div
         initial={{ opacity: 0 }}
         animate={{ opacity: 1 }}
-        className="text-xs text-red-500"
+        className="flex items-center justify-center h-64"
       >
-        无法加载数据，请检查后端是否正常运行
-      </motion.p>
+        <div className="text-center space-y-3">
+          <div className="w-16 h-16 mx-auto rounded-full bg-terra-400/10 flex items-center justify-center">
+            <span className="text-2xl text-terra-400">!</span>
+          </div>
+          <p className="text-sm text-espresso-500">无法连接后端服务</p>
+          <p className="text-xs text-espresso-400">请检查服务是否正常运行</p>
+        </div>
+      </motion.div>
     );
   }
 
   const goWorkspaces = data.accounts.flatMap((a) =>
     a.workspaces.filter((w) => w.subscribed),
   );
+  const totalKeys = data.total_keys;
+  const availablePercent =
+    totalKeys > 0 ? Math.round((data.available_keys / totalKeys) * 100) : 0;
 
   return (
-    <motion.div variants={container} initial="hidden" animate="show" className="space-y-4">
-      {/* Stat cards */}
-      <div className="grid grid-cols-4 gap-3">
-        <StatCard label="密钥总数" value={data.total_keys} delay={0} />
-        <StatCard label="可用" value={data.available_keys} tone="success" delay={0.05} />
-        <StatCard label="耗尽" value={data.depleted_keys} tone="danger" delay={0.1} />
-        <StatCard label="Go 工作区" value={goWorkspaces.length} tone="info" delay={0.15} />
-      </div>
+    <div className="max-w-5xl space-y-8">
+      {/* Hero section — asymmetric stat layout */}
+      <div className="grid grid-cols-[1.5fr_1fr_1fr_1fr] gap-4">
+        {/* Primary stat — larger, with decorative element */}
+        <motion.div
+          initial={{ opacity: 0, y: 12 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.4 }}
+          className="relative overflow-hidden bg-white rounded-mcm-xl border border-cream-200 shadow-mcm p-5"
+        >
+          {/* Decorative starburst */}
+          <div className="absolute -top-6 -right-6 w-24 h-24 opacity-[0.06]">
+            <svg viewBox="0 0 100 100">
+              <circle cx="50" cy="50" r="48" fill="none" stroke="currentColor" strokeWidth="1" className="text-espresso-700" />
+              <line x1="50" y1="5" x2="50" y2="95" stroke="currentColor" strokeWidth="0.5" className="text-espresso-700" />
+              <line x1="5" y1="50" x2="95" y2="50" stroke="currentColor" strokeWidth="0.5" className="text-espresso-700" />
+              <line x1="18" y1="18" x2="82" y2="82" stroke="currentColor" strokeWidth="0.5" className="text-espresso-700" />
+              <line x1="82" y1="18" x2="18" y2="82" stroke="currentColor" strokeWidth="0.5" className="text-espresso-700" />
+            </svg>
+          </div>
 
-      {/* Go usage cards */}
-      {goWorkspaces.length > 0 && (
-        <motion.div variants={container} initial="hidden" animate="show">
-          <h2 className="text-xs font-medium text-gray-500 dark:text-gray-400 mb-2">
-            Go 使用量
-          </h2>
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
-            {goWorkspaces.map((ws, i) => (
-              <GoUsageOverview key={ws.id} workspace={ws} delay={i * 0.05} />
-            ))}
+          <span className="text-xs text-espresso-400 uppercase tracking-[0.15em] font-semibold">
+            密钥总数
+          </span>
+          <motion.p
+            className="text-5xl font-bold text-espresso-700 mt-2 tracking-tight tabular-nums"
+            initial={{ scale: 0.8, opacity: 0 }}
+            animate={{ scale: 1, opacity: 1 }}
+            transition={{ delay: 0.15, duration: 0.4 }}
+          >
+            {totalKeys}
+          </motion.p>
+          <div className="flex items-center gap-2 mt-3">
+            <div className="flex-1 h-1.5 bg-cream-200 rounded-full overflow-hidden">
+              <motion.div
+                className="h-full bg-harvest-500 rounded-full"
+                initial={{ width: 0 }}
+                animate={{ width: `${availablePercent}%` }}
+                transition={{ delay: 0.3, duration: 0.8, ease: "easeOut" }}
+              />
+            </div>
+            <span className="text-xs text-espresso-400 tabular-nums">
+              {availablePercent}% 可用
+            </span>
           </div>
         </motion.div>
+
+        <StatCard
+          label="可用密钥"
+          value={data.available_keys}
+          tone="success"
+          delay={0.05}
+        />
+        <StatCard
+          label="已耗尽"
+          value={data.depleted_keys}
+          tone="danger"
+          delay={0.1}
+        />
+        <StatCard
+          label="Go 工作区"
+          value={goWorkspaces.length}
+          tone="info"
+          delay={0.15}
+        />
+      </div>
+
+      {/* Go usage section */}
+      {goWorkspaces.length > 0 && (
+        <section>
+          <div className="flex items-center gap-3 mb-4">
+            <div className="w-1 h-5 bg-harvest-500 rounded-full" />
+            <h2 className="text-sm font-semibold text-espresso-700 uppercase tracking-wider">
+              Go 使用量
+            </h2>
+          </div>
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+            {goWorkspaces.map((ws, i) => (
+              <GoUsageOverview key={ws.id} workspace={ws} delay={i * 0.06} />
+            ))}
+          </div>
+        </section>
       )}
 
       {/* Empty state */}
       {data.accounts.length === 0 && (
-        <motion.p
+        <motion.div
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
-          className="text-2xs text-gray-400 text-center py-8"
+          className="text-center py-16"
         >
-          暂无账户，请到设置页面添加
-        </motion.p>
+          <div className="w-20 h-20 mx-auto rounded-full bg-cream-100 flex items-center justify-center mb-4">
+            <span className="text-3xl">+</span>
+          </div>
+          <p className="text-sm text-espresso-500 mb-1">尚无账户</p>
+          <p className="text-xs text-espresso-400">
+            前往设置页面添加第一个账户
+          </p>
+        </motion.div>
       )}
 
-      {/* Last refresh */}
-      <p className="text-2xs text-gray-400">
-        自动刷新 {REFRESH_INTERVAL_MS / 1000}s · 上次更新:{" "}
-        {dataUpdatedAt ? new Date(dataUpdatedAt).toLocaleTimeString() : "--:--:--"}
-      </p>
-    </motion.div>
+      {/* Subtle refresh indicator */}
+      <div className="flex items-center gap-2 text-xs text-espresso-300">
+        <span className="w-1.5 h-1.5 rounded-full bg-harvest-500/40" />
+        自动刷新 {REFRESH_INTERVAL_MS / 1000}s · 上次更新{" "}
+        {dataUpdatedAt
+          ? new Date(dataUpdatedAt).toLocaleTimeString()
+          : "--:--:--"}
+      </div>
+    </div>
   );
 }

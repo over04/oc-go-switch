@@ -18,22 +18,46 @@ export function GeneralForm({
   onChangeMaxRetries,
 }: GeneralFormProps) {
   return (
-    <div className="space-y-2.5">
+    <div className="space-y-4">
       <div>
-        <label className="block text-2xs text-gray-400 dark:text-gray-500 mb-0.5">监听地址</label>
-        <Input value={listen} disabled className="font-mono" />
+        <label className="block text-xs font-medium text-espresso-500 mb-1.5">
+          监听地址
+        </label>
+        <Input value={listen} disabled className="font-mono opacity-60" />
       </div>
-      <div>
-        <label className="block text-2xs text-gray-400 dark:text-gray-500 mb-0.5">刷新间隔 (秒)</label>
-        <Input type="number" value={String(refreshIntervalSecs)} onChange={(e) => onChangeRefreshInterval(Number(e.target.value) || 60)} className="max-w-[120px]" />
+
+      <div className="grid grid-cols-2 gap-4">
+        <div>
+          <label className="block text-xs font-medium text-espresso-500 mb-1.5">
+            刷新间隔（秒）
+          </label>
+          <Input
+            type="number"
+            value={String(refreshIntervalSecs)}
+            onChange={(e) =>
+              onChangeRefreshInterval(Number(e.target.value) || 60)
+            }
+          />
+        </div>
+        <div>
+          <label className="block text-xs font-medium text-espresso-500 mb-1.5">
+            最大重试次数
+          </label>
+          <Input
+            type="number"
+            value={String(maxRetries)}
+            onChange={(e) =>
+              onChangeMaxRetries(Number(e.target.value) || 1)
+            }
+          />
+        </div>
       </div>
+
       <div>
-        <label className="block text-2xs text-gray-400 dark:text-gray-500 mb-0.5">最大重试次数</label>
-        <Input type="number" value={String(maxRetries)} onChange={(e) => onChangeMaxRetries(Number(e.target.value) || 1)} className="max-w-[120px]" />
-      </div>
-      <div>
-        <label className="block text-2xs text-gray-400 dark:text-gray-500 mb-0.5">上游 Base URL</label>
-        <Input value={baseUrl} disabled className="font-mono" />
+        <label className="block text-xs font-medium text-espresso-500 mb-1.5">
+          上游 Base URL
+        </label>
+        <Input value={baseUrl} disabled className="font-mono opacity-60" />
       </div>
     </div>
   );

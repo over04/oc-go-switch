@@ -31,9 +31,9 @@ export function Dialog({
       ref={ref}
       onClose={onClose}
       className={clsx(
-        "backdrop:bg-black/50 rounded-lg border border-gray-200 dark:border-gray-700",
-        "bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100",
-        "p-0 shadow-xl max-w-sm w-full",
+        "backdrop:bg-espresso-900/30 rounded-mcm-lg border border-cream-200",
+        "bg-white text-espresso-700",
+        "p-0 shadow-mcm-lg max-w-sm w-full",
         className,
       )}
       {...props}
@@ -44,15 +44,15 @@ export function Dialog({
             initial={{ opacity: 0, scale: 0.95, y: 8 }}
             animate={{ opacity: 1, scale: 1, y: 0 }}
             exit={{ opacity: 0, scale: 0.95, y: 8 }}
-            transition={{ type: "spring", stiffness: 500, damping: 35 }}
+            transition={{ type: "spring", stiffness: 400, damping: 30 }}
           >
-            <div className="flex items-center justify-between px-4 py-3 border-b border-gray-100 dark:border-gray-700">
-              <h2 className="text-xs font-semibold">{title}</h2>
-              <Button size="xs" tone="default" onClick={onClose} className="!text-2xs">
-                ✕
+            <div className="flex items-center justify-between px-5 py-3 border-b border-cream-100">
+              <h2 className="text-sm font-semibold tracking-tight">{title}</h2>
+              <Button size="xs" tone="default" onClick={onClose}>
+                &times;
               </Button>
             </div>
-            <div className="px-4 py-3">{children}</div>
+            <div className="px-5 py-4">{children}</div>
           </motion.div>
         )}
       </AnimatePresence>

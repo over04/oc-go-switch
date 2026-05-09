@@ -12,4 +12,5 @@ pub struct LogEntry {
     pub key_masked: String,
     pub success: bool,
     pub error_message: Option<String>,
+    pub stream: bool,
 }

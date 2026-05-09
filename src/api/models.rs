@@ -1,4 +1,4 @@
-use axum::{extract::State, response::Json};
+use axum::{extract::State, http::StatusCode, response::{IntoResponse, Json}};
 use serde::{Deserialize, Serialize};
 
 use crate::pool::pool::KeyPoolHandle;
@@ -32,7 +32,8 @@ async fn fetch_model_list(handle: &KeyPoolHandle, base_url: &str) -> Result<Mode
     let key = handle.select_key().await.ok_or_else(|| "No available Go key in pool".to_string())?;
     let url = format!("{}/models", base_url);
 
-    let resp = reqwest::Client::new()
+    let resp = handle
+        .http_client
         .get(&url)
         .header("Authorization", format!("Bearer {}", key.key_value))
         .timeout(std::time::Duration::from_secs(10))
@@ -50,11 +51,31 @@ async fn fetch_model_list(handle: &KeyPoolHandle, base_url: &str) -> Result<Mode
     serde_json::from_str(&body).map_err(|e| format!("JSON parse error: {e}"))
 }
 
-/// GET /api/models
+/// GET /v1/models — OpenAI-compatible model list (external facing)
+pub async fn list_models_v1(State(handle): State<KeyPoolHandle>) -> impl IntoResponse {
+    let cfg = handle.config();
+    let config = cfg.read().await;
+    let base_url = config.go.base_url.clone();
+    drop(config);
+
+    match fetch_model_list(&handle, &base_url).await {
+        Ok(r) => match serde_json::to_value(r) {
+            Ok(v) => (StatusCode::OK, Json(v)).into_response(),
+            Err(e) => (StatusCode::INTERNAL_SERVER_ERROR, Json(serde_json::json!({
+                "error": { "message": format!("Serialization error: {e}"), "type": "server_error" }
+            }))).into_response(),
+        },
+        Err(e) => (StatusCode::BAD_GATEWAY, Json(serde_json::json!({
+            "error": { "message": e, "type": "proxy_error" }
+        }))).into_response(),
+    }
+}
+
+/// GET /api/models — merged view for dashboard
 pub async fn list_models(State(handle): State<KeyPoolHandle>) -> Json<MergedModelsResponse> {
     let cfg = handle.config();
     let config = cfg.read().await;
-    let base_url = config.upstream.base_url.clone();
+    let base_url = config.go.base_url.clone();
     drop(config);
 
     let (openai, claude) = tokio::join!(
@@ -78,7 +99,7 @@ pub async fn list_models(State(handle): State<KeyPoolHandle>) -> Json<MergedMode
 pub async fn list_openai_models(State(handle): State<KeyPoolHandle>) -> Json<ModelListResult> {
     let cfg = handle.config();
     let config = cfg.read().await;
-    let url = config.upstream.base_url.clone();
+    let url = config.go.base_url.clone();
     drop(config);
 
     Json(match fetch_model_list(&handle, &url).await {
@@ -91,7 +112,7 @@ pub async fn list_openai_models(State(handle): State<KeyPoolHandle>) -> Json<Mod
 pub async fn list_claude_models(State(handle): State<KeyPoolHandle>) -> Json<ModelListResult> {
     let cfg = handle.config();
     let config = cfg.read().await;
-    let url = config.upstream.base_url.clone();
+    let url = config.go.base_url.clone();
     drop(config);
 
     Json(match fetch_model_list(&handle, &url).await {

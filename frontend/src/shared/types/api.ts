@@ -52,8 +52,7 @@ export interface ConfigResponse {
   listen: string;
   refresh_interval_secs: number;
   max_retries: number;
-  selection: { sort_by: string };
-  upstream: { base_url: string };
+  go: { base_url: string };
   accounts: AccountListEntry[];
 }
 

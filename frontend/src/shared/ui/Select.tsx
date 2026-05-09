@@ -4,8 +4,8 @@ import clsx from "clsx";
 type SelectSize = "xs" | "sm";
 
 const sizeClass: Record<SelectSize, string> = {
-  xs: "h-6 px-2 text-2xs",
-  sm: "h-7 px-2.5 text-xs",
+  xs: "h-6 px-2.5 text-xs",
+  sm: "h-7 px-3 text-sm",
 };
 
 interface SelectProps extends Omit<ComponentProps<"select">, "size"> {
@@ -17,9 +17,9 @@ export const Select = forwardRef<HTMLSelectElement, SelectProps>(
     <select
       ref={ref}
       className={clsx(
-        "rounded border border-gray-200 dark:border-gray-600",
-        "bg-gray-50 dark:bg-gray-700 text-gray-900 dark:text-gray-100",
-        "focus:outline-none focus:ring-1 focus:ring-blue-400",
+        "rounded-[10px] border border-cream-300 bg-white text-espresso-700",
+        "transition-all duration-200",
+        "focus:outline-none focus:ring-[3px] focus:ring-terra-500/15 focus:border-terra-500",
         sizeClass[size],
         className,
       )}

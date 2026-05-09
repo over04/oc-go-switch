@@ -4,28 +4,107 @@
 
 @layer base {
   :root {
-    --color-bg: 255 255 255;
-    --color-fg: 17 24 39;
-    --color-muted: 107 114 128;
-    --color-border: 229 231 235;
-    --color-surface: 249 250 251;
-    --color-accent: 59 130 246;
-    --color-success: 22 163 74;
-    --color-warning: 217 119 6;
-    --color-danger: 220 38 38;
+    --color-bg: 245 230 211;
+    --color-surface: 255 254 252;
+    --color-fg: 44 36 22;
+    --color-muted: 107 93 79;
+    --color-border: 237 217 194;
+    --color-accent: 217 118 66;
+    --color-success: 74 124 89;
+    --color-warning: 212 165 116;
+    --color-danger: 229 122 119;
+    --radius-mcm: 12px;
+    --radius-mcm-lg: 16px;
   }
 
-  .dark {
-    --color-bg: 17 24 39;
-    --color-fg: 243 244 246;
-    --color-muted: 156 163 175;
-    --color-border: 55 65 81;
-    --color-surface: 31 41 55;
-    --color-accent: 96 165 250;
-    --color-success: 34 197 94;
-    --color-warning: 251 191 36;
-    --color-danger: 248 113 113;
+  * {
+    border-color: rgb(var(--color-border));
   }
 
-  body { font-size: 14px; line-height: 1.5; }
+  body {
+    font-family: "Jost", "Century Gothic", "Futura", "Avenir", system-ui, sans-serif;
+    font-size: 14px;
+    line-height: 1.5;
+    background: rgb(var(--color-bg));
+    color: rgb(var(--color-fg));
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+
+  h1, h2, h3, h4 {
+    font-weight: 600;
+    letter-spacing: -0.01em;
+    color: rgb(var(--color-fg));
+  }
+}
+
+@layer components {
+  .mcm-card {
+    background: rgb(var(--color-surface));
+    border-radius: var(--radius-mcm-lg);
+    border: 1px solid rgb(var(--color-border));
+    box-shadow: 0 2px 12px rgba(44, 36, 22, 0.05);
+  }
+
+  .mcm-pill {
+    border-radius: 9999px;
+    padding: 0.375rem 1rem;
+    font-weight: 500;
+    font-size: 0.8125rem;
+    transition: all 0.2s ease;
+  }
+
+  .mcm-input {
+    border-radius: 10px;
+    border: 1px solid rgb(var(--color-border));
+    background: rgb(var(--color-surface));
+    padding: 0.5rem 0.75rem;
+    font-size: 0.8125rem;
+    transition: border-color 0.2s ease, box-shadow 0.2s ease;
+  }
+  .mcm-input:focus {
+    outline: none;
+    border-color: rgb(var(--color-accent));
+    box-shadow: 0 0 0 3px rgba(217, 118, 66, 0.15);
+  }
+}
+
+/* Atomic-age geometric background pattern */
+.bg-mcm-pattern {
+  background-color: rgb(var(--color-bg));
+  background-image:
+    radial-gradient(circle at 20% 30%, rgba(212, 165, 116, 0.08) 0%, transparent 50%),
+    radial-gradient(circle at 80% 70%, rgba(125, 155, 168, 0.06) 0%, transparent 50%),
+    radial-gradient(circle at 50% 50%, rgba(74, 124, 89, 0.04) 0%, transparent 60%);
+}
+
+/* Starburst accent */
+.mcm-starburst {
+  position: relative;
+}
+.mcm-starburst::after {
+  content: "";
+  position: absolute;
+  top: -4px;
+  right: -4px;
+  width: 20px;
+  height: 20px;
+  background: radial-gradient(circle, rgb(var(--color-accent)) 10%, transparent 70%);
+  opacity: 0.3;
+  border-radius: 50%;
+}
+
+/* Thin scrollbar for MCM aesthetic */
+::-webkit-scrollbar {
+  width: 5px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: rgb(var(--color-muted) / 0.3);
+  border-radius: 9999px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: rgb(var(--color-muted) / 0.5);
 }

@@ -3,7 +3,7 @@ import { createRoot } from "react-dom/client";
 import { RouterProvider } from "react-router-dom";
 import { QueryProvider } from "@/app/providers/QueryProvider";
 import { router } from "@/app/router";
-import "@/shared/ui/ThemeToggle"; // bootstrap theme on load
+
 import "@/styles/index.css";
 
 const root = document.getElementById("root");
