@@ -1,0 +1,101 @@
+use axum::{extract::State, response::Json};
+use serde::{Deserialize, Serialize};
+
+use crate::pool::pool::KeyPoolHandle;
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ModelListResponse {
+    pub object: String,
+    pub data: Vec<ModelInfo>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ModelInfo {
+    pub id: String,
+    pub owned_by: String,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(untagged)]
+pub enum ModelListResult {
+    Ok(ModelListResponse),
+    Error { error: String },
+}
+
+#[derive(Debug, Serialize)]
+pub struct MergedModelsResponse {
+    pub openai: ModelListResult,
+    pub claude: ModelListResult,
+}
+
+async fn fetch_model_list(handle: &KeyPoolHandle, base_url: &str) -> Result<ModelListResponse, String> {
+    let key = handle.select_key().await.ok_or_else(|| "No available Go key in pool".to_string())?;
+    let url = format!("{}/models", base_url);
+
+    let resp = reqwest::Client::new()
+        .get(&url)
+        .header("Authorization", format!("Bearer {}", key.key_value))
+        .timeout(std::time::Duration::from_secs(10))
+        .send()
+        .await
+        .map_err(|e| format!("Upstream unreachable: {e}"))?;
+
+    let status = resp.status();
+    let body = resp.text().await.map_err(|e| format!("Read error: {e}"))?;
+
+    if !status.is_success() {
+        return Err(format!("HTTP {}: {}", status.as_u16(), body));
+    }
+
+    serde_json::from_str(&body).map_err(|e| format!("JSON parse error: {e}"))
+}
+
+/// GET /api/models
+pub async fn list_models(State(handle): State<KeyPoolHandle>) -> Json<MergedModelsResponse> {
+    let cfg = handle.config();
+    let config = cfg.read().await;
+    let base_url = config.upstream.base_url.clone();
+    drop(config);
+
+    let (openai, claude) = tokio::join!(
+        fetch_model_list(&handle, &base_url),
+        fetch_model_list(&handle, &base_url),
+    );
+
+    Json(MergedModelsResponse {
+        openai: match openai {
+            Ok(r) => ModelListResult::Ok(r),
+            Err(e) => ModelListResult::Error { error: e },
+        },
+        claude: match claude {
+            Ok(r) => ModelListResult::Ok(r),
+            Err(e) => ModelListResult::Error { error: e },
+        },
+    })
+}
+
+/// GET /api/models/openai
+pub async fn list_openai_models(State(handle): State<KeyPoolHandle>) -> Json<ModelListResult> {
+    let cfg = handle.config();
+    let config = cfg.read().await;
+    let url = config.upstream.base_url.clone();
+    drop(config);
+
+    Json(match fetch_model_list(&handle, &url).await {
+        Ok(r) => ModelListResult::Ok(r),
+        Err(e) => ModelListResult::Error { error: e },
+    })
+}
+
+/// GET /api/models/claude
+pub async fn list_claude_models(State(handle): State<KeyPoolHandle>) -> Json<ModelListResult> {
+    let cfg = handle.config();
+    let config = cfg.read().await;
+    let url = config.upstream.base_url.clone();
+    drop(config);
+
+    Json(match fetch_model_list(&handle, &url).await {
+        Ok(r) => ModelListResult::Ok(r),
+        Err(e) => ModelListResult::Error { error: e },
+    })
+}

@@ -1,0 +1,20 @@
+[package]
+name = "oc-go-switch"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+axum = "0.8"
+tokio = { version = "1", features = ["full"] }
+reqwest = { version = "0.12", features = ["cookies", "json"] }
+serde = { version = "1", features = ["derive"] }
+serde_yaml = "0.9"
+serde_json = "1"
+tracing = "0.1"
+tracing-subscriber = "0.3"
+rust-embed = "8"
+tower-http = { version = "0.6", features = ["cors"] }
+thiserror = "2"
+regex = "1"
+anyhow = "1"
+chrono = { version = "0.4", features = ["serde"] }
