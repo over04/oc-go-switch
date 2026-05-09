@@ -14,11 +14,11 @@ use crate::opencode::types::SubscriptionPlan;
 use super::key::PoolKey;
 use super::selector::StickyKeySelector;
 
-/// Pick the best key ID from the Go-only pool.
-/// Rules:
-/// 1. Only Go-subscribed, non-depleted, non-fully-exhausted keys
-/// 2. At most 1 key per workspace (lowest usage %)
-/// 3. Sort by usage % ascending (least-used first)
+/// 从 Go 订阅池中选出最佳 key。
+/// 规则：
+/// 1. 只选已订阅 Go、未耗尽、未完全满额的 key
+/// 2. 每个工作区最多选一个（用量最低的）
+/// 3. 按用量百分比升序排列
 fn pick_best_key_id(keys: &[PoolKey], depleted_ids: Option<&HashSet<String>>) -> Option<String> {
     let excluded = |id: &str| depleted_ids.is_some_and(|s| s.contains(id));
     let mut best_per_ws: HashMap<&str, &PoolKey> = HashMap::new();
@@ -66,13 +66,13 @@ impl KeyPoolHandle {
     }
 }
 
-/// Discover all keys across all configured accounts and build a KeyPool.
+/// 遍历所有配置的账户，发现工作区和 API key，构建 KeyPool。
 pub async fn discover(config: &Config) -> anyhow::Result<KeyPool> {
     let mut all_keys: Vec<PoolKey> = Vec::new();
 
     for account in &config.accounts {
         info!(
-            "Discovering workspaces for account '{}' ({})",
+            "正在发现账户 '{}' ({}) 的工作区...",
             account.name, account.label
         );
 
@@ -81,16 +81,13 @@ pub async fn discover(config: &Config) -> anyhow::Result<KeyPool> {
         let workspaces = match oc.get_workspaces().await {
             Ok(ws) => ws,
             Err(e) => {
-                error!(
-                    "Failed to get workspaces for account '{}': {e}",
-                    account.name
-                );
+                error!("获取账户 '{}' 的工作区列表失败: {e}", account.name);
                 continue;
             }
         };
 
         info!(
-            "Account '{}': found {} workspace(s)",
+            "账户 '{}': 发现 {} 个工作区",
             account.name,
             workspaces.len()
         );
@@ -100,7 +97,7 @@ pub async fn discover(config: &Config) -> anyhow::Result<KeyPool> {
                 Ok(k) => k,
                 Err(e) => {
                     warn!(
-                        "Failed to list keys for workspace '{}' ({}/{}): {e}",
+                        "获取工作区 '{}' ({}/{}) 的 key 列表失败: {e}",
                         ws.name, account.name, ws.id
                     );
                     continue;
@@ -112,7 +109,7 @@ pub async fn discover(config: &Config) -> anyhow::Result<KeyPool> {
                 Some(b) if b.subscribed => match oc.get_go_usage(&ws.id).await {
                     Ok(u) => u,
                     Err(e) => {
-                        warn!("Failed to get Go usage for workspace '{}': {e}", ws.name);
+                        warn!("获取工作区 '{}' 的 Go 用量失败: {e}", ws.name);
                         None
                     }
                 },
@@ -124,21 +121,21 @@ pub async fn discover(config: &Config) -> anyhow::Result<KeyPool> {
                 .map(|b| b.subscribed && b.plan == Some(SubscriptionPlan::Go))
                 .unwrap_or(false);
 
-            // Skip Zen-subscribed workspaces
+            // 跳过 Zen 订阅的工作区
             if let Some(ref b) = billing {
                 if b.plan == Some(SubscriptionPlan::Zen) {
                     info!(
-                        "Skipping Zen workspace '{}' (account '{}')",
+                        "跳过 Zen 工作区 '{}' (账户 '{}')",
                         ws.name, account.name
                     );
                     continue;
                 }
             }
 
-            // Only Go-subscribed workspaces enter the pool
+            // 只有 Go 订阅的工作区才进入池
             if !subscribed {
                 info!(
-                    "Skipping non-Go workspace '{}' (account '{}')",
+                    "跳过非 Go 工作区 '{}' (账户 '{}')",
                     ws.name, account.name
                 );
                 continue;
@@ -160,7 +157,7 @@ pub async fn discover(config: &Config) -> anyhow::Result<KeyPool> {
                 };
 
                 info!(
-                    "Found key: {} | workspace={} subscribed=true go_usage={}",
+                    "发现 key: {} | workspace={} subscribed=true go_usage={}",
                     pool_key.masked_key(),
                     pool_key.workspace_name,
                     go_usage.is_some(),
@@ -173,11 +170,11 @@ pub async fn discover(config: &Config) -> anyhow::Result<KeyPool> {
 
     if all_keys.is_empty() {
         return Err(anyhow::anyhow!(
-            "No Go-subscribed API keys discovered. Check config and account auth."
+            "未发现 Go 订阅的 API key，请检查配置和账户授权。"
         ));
     }
 
-    info!("KeyPool: total {} Go-subscribed key(s) discovered", all_keys.len());
+    info!("KeyPool: 共发现 {} 个 Go 订阅 key", all_keys.len());
 
     Ok(KeyPool {
         keys: all_keys,
@@ -201,8 +198,7 @@ pub fn make_handle(
 }
 
 impl KeyPoolHandle {
-    /// Select a key. Pass `depleted_ids` to skip keys already exhausted
-    /// during this request; pass `None` for general use.
+    /// 选一个 key。`depleted_ids` 用于在本轮请求中排除已耗尽的 key，传 `None` 表示不排除。
     pub async fn select_key(
         &self,
         depleted_ids: Option<&HashSet<String>>,
@@ -250,9 +246,8 @@ impl KeyPoolHandle {
         None
     }
 
-    /// Trigger an immediate pool refresh. Keys in `depleted_ids` are
-    /// marked depleted after the new pool is loaded so they are not
-    /// re-selected during the same request.
+    /// 立即刷新整个池（全量 discover）。`depleted_ids` 中的 key 在刷新后立即标记为耗尽，
+    /// 防止它们在本轮请求中被重新选中。
     pub async fn trigger_refresh(
         &self,
         depleted_ids: Option<&HashSet<String>>,
@@ -278,27 +273,22 @@ impl KeyPoolHandle {
                 let count = new_pool.keys.len();
                 let mut pool = self.inner.write().await;
                 *pool = new_pool;
-                info!(
-                    "trigger_refresh: pool refreshed, {} key(s) available",
-                    count
-                );
+                info!("池已刷新，{} 个 key 可用", count);
                 true
             }
             Err(e) => {
-                error!("trigger_refresh: discover failed: {e}");
+                error!("池刷新失败: {e}");
                 false
             }
         }
     }
 
-    /// Record a proxy request log entry.
+    /// 记录一条代理请求日志。
     pub async fn record_log(&self, entry: LogEntry) {
         self.log_store.record(entry).await;
     }
 
-    /// Mark the current sticky key as depleted, then spawn an async
-    /// background task to refresh usage data for that workspace so
-    /// the depleted flag stays accurate.
+    /// 将当前 sticky key 标记为耗尽，并异步刷新该工作区的用量数据。
     pub async fn mark_current_depleted(&self) {
         let depleted_info = {
             let mut pool = self.inner.write().await;
@@ -324,27 +314,23 @@ impl KeyPoolHandle {
             let handle = self.clone();
             tokio::spawn(async move {
                 if let Err(e) = handle
-                    .refresh_workspace_balance(&account_name, &ws_id)
+                    .refresh_workspace_usage(&account_name, &ws_id)
                     .await
                 {
                     warn!(
-                        "Background usage refresh failed for workspace {}/{}: {e}",
+                        "后台用量刷新失败 workspace={}/{}: {e}",
                         account_name, ws_id
                     );
                 } else {
-                    info!(
-                        "Usage refreshed for depleted key {}",
-                        PoolKey::mask_value(&key_value)
-                    );
+                    info!("已刷新耗尽 key {} 的用量数据", PoolKey::mask_value(&key_value));
                 }
             });
         }
     }
 
-    /// Refresh Go usage for a single workspace (lightweight —
-    /// does not run full discovery). Updates all keys belonging to the
-    /// same workspace in the pool.
-    async fn refresh_workspace_balance(
+    /// 刷新单个工作区的 Go 用量（轻量操作，不走全量 discover）。
+    /// 更新池中该工作区下所有 key 的 go_usage。
+    async fn refresh_workspace_usage(
         &self,
         account_name: &str,
         workspace_id: &str,
@@ -356,14 +342,14 @@ impl KeyPoolHandle {
                 .iter()
                 .find(|a| a.name == account_name)
                 .cloned()
-                .ok_or_else(|| anyhow::anyhow!("Account '{account_name}' not found in config"))?
+                .ok_or_else(|| anyhow::anyhow!("账户 '{account_name}' 不在配置中"))?
         };
 
         let oc = OpencodeClient::new(&account.name, &account.auth);
         let billing = oc.get_billing(workspace_id).await?;
         let go_usage = if billing.subscribed {
             oc.get_go_usage(workspace_id).await.unwrap_or_else(|e| {
-                warn!("Failed to get Go usage for workspace '{workspace_id}': {e}");
+                warn!("获取工作区 '{workspace_id}' 的 Go 用量失败: {e}");
                 None
             })
         } else {
@@ -374,15 +360,15 @@ impl KeyPoolHandle {
         for k in &mut pool.keys {
             if k.workspace_id == workspace_id && k.account_name == account_name {
                 k.go_usage = go_usage.clone();
-                // If none of the three windows is at 100%, lift depleted.
+                // 如果三个窗口都不满，清除耗尽标记
                 if !k.is_fully_exhausted() {
                     k.depleted = false;
-                    info!("Key {} depleted flag cleared (usage recovered)", k.masked_key());
+                    info!("key {} 耗尽标记已清除（用量已恢复）", k.masked_key());
                 }
             }
         }
 
-        info!("Workspace {workspace_id} go_usage refreshed");
+        info!("工作区 {workspace_id} 的 Go 用量已刷新");
         Ok(())
     }
 }

@@ -29,7 +29,7 @@ pub async fn chat_completions(
         Err(e) => {
             return error::openai_error(
                 StatusCode::BAD_REQUEST,
-                format!("Invalid request body: {e}"),
+                format!("请求体无效: {e}"),
                 "invalid_request_error",
                 None,
                 None,
@@ -57,7 +57,7 @@ pub async fn chat_completions(
         if !image_filter_config.models.is_empty()
             && filter::filter_openai_messages(&mut req.messages, &model, image_filter_config)
         {
-            info!("Image filter applied to model '{model}'");
+            info!("图片过滤已应用于模型 '{model}'");
         }
     }
 
@@ -77,13 +77,13 @@ pub async fn chat_completions(
                         duration_ms: start.elapsed().as_millis() as u64,
                         key_masked: "-".into(),
                         success: false,
-                        error_message: Some("All API keys exhausted".into()),
+                        error_message: Some("所有 API key 已耗尽".into()),
                         stream: is_stream,
                     })
                     .await;
                 return error::openai_error(
                     StatusCode::TOO_MANY_REQUESTS,
-                    "All API keys exhausted",
+                    "所有 API key 已耗尽",
                     "server_error",
                     None,
                     None,
@@ -100,7 +100,7 @@ pub async fn chat_completions(
         let upstream_bytes = serde_json::to_vec(&upstream_value).unwrap_or_default();
 
         info!(
-            "Forwarding request via key {} (workspace={}, attempt={})",
+            "转发请求 key={} workspace={} 第{}次尝试",
             key.masked_key(),
             key.workspace_name,
             _attempt + 1,
@@ -123,7 +123,7 @@ pub async fn chat_completions(
                 let status = r.status();
 
                 if status.is_success() {
-                    info!("Request succeeded via key {}", key.masked_key());
+                    info!("请求成功 key={}", key.masked_key());
                     handle
                         .record_log(LogEntry {
                             timestamp: Utc::now().to_rfc3339(),
@@ -139,7 +139,7 @@ pub async fn chat_completions(
                         .await;
 
                     if is_stream {
-                        return stream::forward_sse_stream(r, true);
+                        return stream::forward_sse_stream(r);
                     }
                     return stream::forward_json_response(r).await;
                 }
@@ -148,7 +148,7 @@ pub async fn chat_completions(
 
                 if is_quota_exhausted(status, &resp_body) {
                     info!(
-                        "Key {} exhausted (status={}), switching...",
+                        "key 已耗尽 key={} status={} 切换中...",
                         key.masked_key(),
                         status
                     );
@@ -177,10 +177,7 @@ pub async fn chat_completions(
                 );
             }
             Err(e) => {
-                warn!(
-                    "Network error with key {}: {e}, retrying...",
-                    key.masked_key()
-                );
+                warn!("网络错误 key={}: {e}，重试下一个 key...", key.masked_key());
                 handle
                     .record_log(LogEntry {
                         timestamp: Utc::now().to_rfc3339(),
@@ -208,21 +205,21 @@ pub async fn chat_completions(
             duration_ms: start.elapsed().as_millis() as u64,
             key_masked: "-".into(),
             success: false,
-            error_message: Some("All API keys exhausted after retries".into()),
+            error_message: Some("重试耗尽，所有 API key 不可用".into()),
             stream: is_stream,
         })
         .await;
     error::openai_error(
         StatusCode::TOO_MANY_REQUESTS,
-        "All API keys exhausted after retries",
+        "重试耗尽，所有 API key 不可用",
         "server_error",
         None,
         None,
     )
 }
 
-/// Only real balance/insufficient errors. Generic rate_limit, overloaded,
-/// or context_length_exceeded (400) are NOT quota signals.
+/// 只有 402 / 429 且响应体中包含真实余额关键词时才判定为额度耗尽。
+/// 泛化的 rate_limit、overloaded_error、context_length_exceeded 不会误触发。
 fn is_quota_exhausted(status: StatusCode, body: &str) -> bool {
     (status == StatusCode::PAYMENT_REQUIRED || status == StatusCode::TOO_MANY_REQUESTS)
         && (body.contains("insufficient")
@@ -238,7 +235,7 @@ fn json_response(status: StatusCode, body: &str) -> Response {
         .unwrap_or_else(|_| {
             Response::builder()
                 .status(StatusCode::INTERNAL_SERVER_ERROR)
-                .body(axum::body::Body::from("Internal proxy error"))
+                .body(axum::body::Body::from("代理内部错误"))
                 .unwrap_or_else(|_| Response::new(axum::body::Body::empty()))
         })
 }

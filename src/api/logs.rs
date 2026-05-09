@@ -34,7 +34,7 @@ pub struct LogsQuery {
     pub success: Option<bool>,
 }
 
-/// GET /api/logs — recent proxy request logs
+/// GET /api/logs — 最近的代理请求日志
 pub async fn list_logs(
     State(handle): State<KeyPoolHandle>,
     axum::extract::Query(query): axum::extract::Query<LogsQuery>,
@@ -66,10 +66,8 @@ pub async fn list_logs(
     Json(filtered)
 }
 
-/// DELETE /api/logs — clear all logs
-pub async fn clear_logs(
-    State(handle): State<KeyPoolHandle>,
-) -> &'static str {
+/// DELETE /api/logs — 清空所有日志
+pub async fn clear_logs(State(handle): State<KeyPoolHandle>) -> &'static str {
     let mut entries = handle.log_store.entries.lock().await;
     entries.clear();
     "ok"

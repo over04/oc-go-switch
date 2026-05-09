@@ -28,7 +28,7 @@ pub struct AccountListResponse {
     pub accounts: Vec<AccountListEntry>,
 }
 
-/// GET /api/accounts — list configured accounts (with masked auth)
+/// GET /api/accounts — 列出已配置的账户（auth 脱敏显示）
 pub async fn list_accounts(State(handle): State<KeyPoolHandle>) -> Json<AccountListResponse> {
     let cfg = handle.config();
     let config = cfg.read().await;
@@ -44,7 +44,7 @@ pub async fn list_accounts(State(handle): State<KeyPoolHandle>) -> Json<AccountL
     Json(AccountListResponse { accounts })
 }
 
-/// POST /api/accounts — add a new account
+/// POST /api/accounts — 添加新账户
 pub async fn add_account(
     State(handle): State<KeyPoolHandle>,
     Json(req): Json<AddAccountRequest>,
@@ -67,7 +67,7 @@ pub async fn add_account(
         save_config(&config)?;
     }
 
-    // Trigger rediscovery in background
+    // 后台触发重新发现
     let h = handle.clone();
     tokio::spawn(async move {
         let cfg_arc = h.config();
@@ -79,16 +79,16 @@ pub async fn add_account(
                 *pool = new_pool;
             }
             Err(e) => {
-                tracing::error!("Rediscovery after account add failed: {e}");
+                tracing::error!("添加账户后重新发现失败: {e}");
             }
         }
     });
 
-    info!("Account '{}' added", req.name);
+    info!("已添加账户 '{}'", req.name);
     Ok(list_accounts(State(handle)).await)
 }
 
-/// DELETE /api/accounts/{name} — remove an account by name
+/// DELETE /api/accounts/{name} — 按名称删除账户
 pub async fn delete_account(
     State(handle): State<KeyPoolHandle>,
     Path(name): Path<String>,
@@ -104,7 +104,7 @@ pub async fn delete_account(
         save_config(&config)?;
     }
 
-    // Trigger rediscovery in background
+    // 后台触发重新发现
     let h = handle.clone();
     tokio::spawn(async move {
         let cfg_arc = h.config();
@@ -116,17 +116,19 @@ pub async fn delete_account(
                 *pool = new_pool;
             }
             Err(e) => {
-                tracing::error!("Rediscovery after account delete failed: {e}");
+                tracing::error!("删除账户后重新发现失败: {e}");
             }
         }
     });
 
-    info!("Account '{}' deleted", name);
+    info!("已删除账户 '{}'", name);
     Ok(list_accounts(State(handle)).await)
 }
 
-/// POST /api/pool/refresh — force trigger rediscovery
-pub async fn force_refresh(State(handle): State<KeyPoolHandle>) -> Result<&'static str, StatusCode> {
+/// POST /api/pool/refresh — 强制触发重新发现
+pub async fn force_refresh(
+    State(handle): State<KeyPoolHandle>,
+) -> Result<&'static str, StatusCode> {
     let h = handle.clone();
     let cfg_arc = h.config();
     let config_guard = cfg_arc.read().await;
@@ -136,17 +138,17 @@ pub async fn force_refresh(State(handle): State<KeyPoolHandle>) -> Result<&'stat
             drop(config_guard);
             let mut pool = h.inner.write().await;
             *pool = new_pool;
-            info!("Force refresh complete: {} keys", count);
+            info!("强制刷新完成: {} 个 key", count);
             Ok("ok")
         }
         Err(e) => {
-            tracing::error!("Force refresh failed: {e}");
+            tracing::error!("强制刷新失败: {e}");
             Err(StatusCode::INTERNAL_SERVER_ERROR)
         }
     }
 }
 
-// ── Full config management ──────────────────────────────────────────
+// ── 完整配置管理 ──────────────────────────────────────────
 
 #[derive(Debug, Serialize)]
 pub struct ConfigResponse {
@@ -165,7 +167,7 @@ pub struct UpdateConfigRequest {
     pub image_filter: Option<crate::config::ImageFilterConfig>,
 }
 
-/// GET /api/config — full config with masked auth
+/// GET /api/config — 获取完整配置（auth 脱敏）
 pub async fn get_config(State(handle): State<KeyPoolHandle>) -> Json<ConfigResponse> {
     let cfg = handle.config();
     let config = cfg.read().await;
@@ -187,7 +189,7 @@ pub async fn get_config(State(handle): State<KeyPoolHandle>) -> Json<ConfigRespo
     })
 }
 
-/// PUT /api/config — update config
+/// PUT /api/config — 更新配置
 pub async fn update_config(
     State(handle): State<KeyPoolHandle>,
     Json(req): Json<UpdateConfigRequest>,
@@ -206,43 +208,40 @@ pub async fn update_config(
         }
         save_config(&config)?;
     }
-    info!("Config updated");
+    info!("配置已更新");
     Ok(get_config(State(handle)).await)
 }
 
-// ── Active key management ───────────────────────────────────────────
+// ── 活跃 key 管理 ───────────────────────────────────────────
 
 #[derive(Debug, Deserialize)]
 pub struct SetActiveKeyRequest {
     pub key_id: String,
 }
 
-/// PUT /api/pool/active-key — manually set the active/sticky key
+/// PUT /api/pool/active-key — 手动设置活跃/sticky key
 pub async fn set_active_key(
     State(handle): State<KeyPoolHandle>,
     Json(req): Json<SetActiveKeyRequest>,
 ) -> Result<&'static str, StatusCode> {
     let mut pool = handle.inner.write().await;
-    // Verify key exists
     if !pool.keys.iter().any(|k| k.id == req.key_id && !k.depleted) {
         return Err(StatusCode::NOT_FOUND);
     }
     pool.selector.set_current(req.key_id);
-    info!("Active key set manually");
+    info!("已手动设置活跃 key");
     Ok("ok")
 }
 
-/// DELETE /api/pool/active-key — clear the active key (revert to auto-selection)
-pub async fn clear_active_key(
-    State(handle): State<KeyPoolHandle>,
-) -> &'static str {
+/// DELETE /api/pool/active-key — 清除活跃 key（恢复自动选择）
+pub async fn clear_active_key(State(handle): State<KeyPoolHandle>) -> &'static str {
     let mut pool = handle.inner.write().await;
     pool.selector.reset();
-    info!("Active key cleared");
+    info!("已清除活跃 key");
     "ok"
 }
 
-// ── Account editing ─────────────────────────────────────────────────
+// ── 账户编辑 ─────────────────────────────────────────────────
 
 #[derive(Debug, Deserialize)]
 pub struct EditAccountRequest {
@@ -250,7 +249,7 @@ pub struct EditAccountRequest {
     pub label: Option<String>,
 }
 
-/// PUT /api/accounts/{name} — edit an account's label or auth
+/// PUT /api/accounts/{name} — 编辑账户的标签或 auth
 pub async fn edit_account(
     State(handle): State<KeyPoolHandle>,
     Path(name): Path<String>,
@@ -280,7 +279,7 @@ pub async fn edit_account(
     }
 
     if changed {
-        // Trigger rediscovery
+        // 触发重新发现
         let h = handle.clone();
         tokio::spawn(async move {
             let cfg_arc = h.config();
@@ -293,7 +292,7 @@ pub async fn edit_account(
         });
     }
 
-    info!("Account '{}' edited", name);
+    info!("已编辑账户 '{}'", name);
     Ok(list_accounts(State(handle)).await)
 }
 
@@ -306,11 +305,11 @@ fn mask_auth(auth: &str) -> String {
 
 fn save_config(config: &Config) -> Result<(), StatusCode> {
     let yaml = serde_yaml::to_string(config).map_err(|e| {
-        tracing::error!("Failed to serialize config: {e}");
+        tracing::error!("序列化配置失败: {e}");
         StatusCode::INTERNAL_SERVER_ERROR
     })?;
     std::fs::write("config.yaml", yaml).map_err(|e| {
-        tracing::error!("Failed to write config.yaml: {e}");
+        tracing::error!("写入 config.yaml 失败: {e}");
         StatusCode::INTERNAL_SERVER_ERROR
     })
 }

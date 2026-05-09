@@ -24,25 +24,25 @@ pub fn build_router(pool_handle: KeyPoolHandle) -> Router {
         .route("/go/v1/models", get(models::list_models_v1))
         .route("/pool/status", get(status::pool_status))
         .route("/health", get(status::health))
-        // Account management
+        // 账户管理
         .route("/api/accounts", get(accounts::list_accounts))
         .route("/api/accounts", post(accounts::add_account))
         .route("/api/accounts/{name}", put(accounts::edit_account))
         .route("/api/accounts/{name}", delete(accounts::delete_account))
-        // Active key management
+        // 活跃 key 管理
         .route("/api/pool/active-key", put(accounts::set_active_key))
         .route("/api/pool/active-key", delete(accounts::clear_active_key))
-        // Config management
+        // 配置管理
         .route("/api/config", get(accounts::get_config))
         .route("/api/config", put(accounts::update_config))
-        // Model list
+        // 模型列表
         .route("/api/models", get(models::list_models))
         .route("/api/models/openai", get(models::list_openai_models))
         .route("/api/models/claude", get(models::list_claude_models))
-        // Logs
+        // 日志
         .route("/api/logs", get(logs::list_logs))
         .route("/api/logs", delete(logs::clear_logs))
-        // Force refresh
+        // 强制刷新
         .route("/api/pool/refresh", post(accounts::force_refresh));
 
     let frontend_routes = Router::new().fallback(get(serve_frontend));
@@ -94,7 +94,7 @@ async fn serve_frontend(uri: axum::http::Uri) -> Response {
                 .unwrap(),
             None => Response::builder()
                 .status(StatusCode::NOT_FOUND)
-                .body(Body::from("Not found"))
+                .body(Body::from("未找到"))
                 .unwrap(),
         },
     }

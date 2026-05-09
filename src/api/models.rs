@@ -1,4 +1,8 @@
-use axum::{extract::State, http::StatusCode, response::{IntoResponse, Json}};
+use axum::{
+    extract::State,
+    http::StatusCode,
+    response::{IntoResponse, Json},
+};
 use serde::{Deserialize, Serialize};
 
 use crate::pool::pool::KeyPoolHandle;
@@ -28,8 +32,14 @@ pub struct MergedModelsResponse {
     pub claude: ModelListResult,
 }
 
-async fn fetch_model_list(handle: &KeyPoolHandle, base_url: &str) -> Result<ModelListResponse, String> {
-    let key = handle.select_key(None).await.ok_or_else(|| "No available Go key in pool".to_string())?;
+async fn fetch_model_list(
+    handle: &KeyPoolHandle,
+    base_url: &str,
+) -> Result<ModelListResponse, String> {
+    let key = handle
+        .select_key(None)
+        .await
+        .ok_or_else(|| "池中没有可用的 Go key".to_string())?;
     let url = format!("{}/models", base_url);
 
     let resp = handle
@@ -39,19 +49,19 @@ async fn fetch_model_list(handle: &KeyPoolHandle, base_url: &str) -> Result<Mode
         .timeout(std::time::Duration::from_secs(10))
         .send()
         .await
-        .map_err(|e| format!("Upstream unreachable: {e}"))?;
+        .map_err(|e| format!("上游不可达: {e}"))?;
 
     let status = resp.status();
-    let body = resp.text().await.map_err(|e| format!("Read error: {e}"))?;
+    let body = resp.text().await.map_err(|e| format!("读取错误: {e}"))?;
 
     if !status.is_success() {
         return Err(format!("HTTP {}: {}", status.as_u16(), body));
     }
 
-    serde_json::from_str(&body).map_err(|e| format!("JSON parse error: {e}"))
+    serde_json::from_str(&body).map_err(|e| format!("JSON 解析错误: {e}"))
 }
 
-/// GET /v1/models — OpenAI-compatible model list (external facing)
+/// GET /v1/models — OpenAI 兼容的模型列表（对外暴露）
 pub async fn list_models_v1(State(handle): State<KeyPoolHandle>) -> impl IntoResponse {
     let cfg = handle.config();
     let config = cfg.read().await;
@@ -61,17 +71,25 @@ pub async fn list_models_v1(State(handle): State<KeyPoolHandle>) -> impl IntoRes
     match fetch_model_list(&handle, &base_url).await {
         Ok(r) => match serde_json::to_value(r) {
             Ok(v) => (StatusCode::OK, Json(v)).into_response(),
-            Err(e) => (StatusCode::INTERNAL_SERVER_ERROR, Json(serde_json::json!({
-                "error": { "message": format!("Serialization error: {e}"), "type": "server_error" }
-            }))).into_response(),
+            Err(e) => (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(serde_json::json!({
+                    "error": { "message": format!("序列化错误: {e}"), "type": "server_error" }
+                })),
+            )
+                .into_response(),
         },
-        Err(e) => (StatusCode::BAD_GATEWAY, Json(serde_json::json!({
-            "error": { "message": e, "type": "proxy_error" }
-        }))).into_response(),
+        Err(e) => (
+            StatusCode::BAD_GATEWAY,
+            Json(serde_json::json!({
+                "error": { "message": e, "type": "proxy_error" }
+            })),
+        )
+            .into_response(),
     }
 }
 
-/// GET /api/models — merged view for dashboard
+/// GET /api/models — 仪表盘合并视图
 pub async fn list_models(State(handle): State<KeyPoolHandle>) -> Json<MergedModelsResponse> {
     let cfg = handle.config();
     let config = cfg.read().await;
@@ -96,7 +114,9 @@ pub async fn list_models(State(handle): State<KeyPoolHandle>) -> Json<MergedMode
 }
 
 /// GET /api/models/openai
-pub async fn list_openai_models(State(handle): State<KeyPoolHandle>) -> Json<ModelListResult> {
+pub async fn list_openai_models(
+    State(handle): State<KeyPoolHandle>,
+) -> Json<ModelListResult> {
     let cfg = handle.config();
     let config = cfg.read().await;
     let url = config.go.base_url.clone();
@@ -109,7 +129,9 @@ pub async fn list_openai_models(State(handle): State<KeyPoolHandle>) -> Json<Mod
 }
 
 /// GET /api/models/claude
-pub async fn list_claude_models(State(handle): State<KeyPoolHandle>) -> Json<ModelListResult> {
+pub async fn list_claude_models(
+    State(handle): State<KeyPoolHandle>,
+) -> Json<ModelListResult> {
     let cfg = handle.config();
     let config = cfg.read().await;
     let url = config.go.base_url.clone();

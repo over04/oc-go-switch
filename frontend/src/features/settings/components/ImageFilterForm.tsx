@@ -24,7 +24,7 @@ interface ImageFilterFormProps {
 }
 
 export function ImageFilterForm({ models, onChange }: ImageFilterFormProps) {
-  // Fetch available models from both providers
+  // 从两个 provider 获取可用模型列表
   const openaiQuery = useQuery({
     queryKey: ["models", "openai"],
     queryFn: getOpenaiModels,

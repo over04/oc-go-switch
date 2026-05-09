@@ -27,7 +27,7 @@ impl OpencodeClient {
                 headers
             })
             .build()
-            .expect("Failed to build reqwest client");
+            .expect("构建 reqwest client 失败");
 
         Self {
             client,
@@ -35,12 +35,12 @@ impl OpencodeClient {
         }
     }
 
-    /// Discover all workspaces under this account.
+    /// 发现该账户下的所有工作区。
     pub async fn get_workspaces(&self) -> Result<Vec<Workspace>, ServerFnError> {
         serverfn::call_no_args::<Vec<Workspace>>(&self.client, GET_WORKSPACES_HASH).await
     }
 
-    /// Fetch the workspace page HTML.
+    /// 获取工作区页面 HTML。
     async fn fetch_workspace_page(&self, workspace_id: &str) -> Result<String, ServerFnError> {
         let url = format!("https://opencode.ai/workspace/{}", workspace_id);
         let resp = self.client.get(&url).send().await?;
@@ -48,7 +48,7 @@ impl OpencodeClient {
         Ok(text)
     }
 
-    /// Fetch the Go usage page HTML for a workspace.
+    /// 获取工作区 Go 用量页面 HTML。
     async fn fetch_go_page(&self, workspace_id: &str) -> Result<String, ServerFnError> {
         let url = format!("https://opencode.ai/workspace/{}/go", workspace_id);
         let resp = self.client.get(&url).send().await?;
@@ -56,7 +56,7 @@ impl OpencodeClient {
         Ok(text)
     }
 
-    /// Scrape API key from workspace page HTML.
+    /// 从工作区页面 HTML 刮取 API key。
     pub async fn list_keys(&self, workspace_id: &str) -> Result<Vec<ApiKeyEntry>, ServerFnError> {
         let html = self.fetch_workspace_page(workspace_id).await?;
         let re = Regex::new(r#"sk-[a-zA-Z0-9]{40,80}"#).unwrap();
@@ -77,7 +77,7 @@ impl OpencodeClient {
         Ok(keys)
     }
 
-    /// Scrape billing/subscription info from workspace page HTML.
+    /// 从工作区页面 HTML 刮取订阅/账单信息。
     pub async fn get_billing(&self, workspace_id: &str) -> Result<BillingInfo, ServerFnError> {
         let html = self.fetch_workspace_page(workspace_id).await?;
 
@@ -91,22 +91,18 @@ impl OpencodeClient {
 
         let subscribed = plan == Some(SubscriptionPlan::Go);
 
-        Ok(BillingInfo {
-            plan,
-            subscribed,
-        })
+        Ok(BillingInfo { plan, subscribed })
     }
 
-    /// Scrape Go usage data from the workspace Go page.
-    /// Only call for workspaces known to have a Go subscription.
-    pub async fn get_go_usage(&self, workspace_id: &str) -> Result<Option<GoUsage>, ServerFnError> {
+    /// 从工作区 Go 页面刮取 Go 用量数据。仅对已知有 Go 订阅的工作区调用。
+    pub async fn get_go_usage(
+        &self,
+        workspace_id: &str,
+    ) -> Result<Option<GoUsage>, ServerFnError> {
         let html = self.fetch_go_page(workspace_id).await?;
 
-        // Parse rolling usage blocks: {status:"ok",resetInSec:NNN,usagePercent:NN}
-        let re = Regex::new(
-            r#"\bresetInSec:(\d+),usagePercent:(\d+)"#,
-        )
-        .unwrap();
+        // 解析滚动用量块: {status:"ok",resetInSec:NNN,usagePercent:NN}
+        let re = Regex::new(r#"\bresetInSec:(\d+),usagePercent:(\d+)"#).unwrap();
 
         let mut matches: Vec<(u64, u32)> = Vec::new();
         for caps in re.captures_iter(&html) {

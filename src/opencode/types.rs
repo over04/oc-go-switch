@@ -22,20 +22,20 @@ pub struct BillingInfo {
     pub subscribed: bool,
 }
 
-/// Go (lite) subscription usage data scraped from the workspace Go page.
+/// Go（lite）订阅用量数据，从工作区 Go 页面刮取。
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct GoUsage {
-    /// Hourly rolling window usage percent (0-100)
+    /// 小时滚动窗口用量百分比 (0–100)
     pub hourly_percent: u32,
-    /// Seconds until hourly reset
+    /// 距离小时窗口重置的秒数
     pub hourly_reset_sec: u64,
-    /// Weekly usage percent (0-100)
+    /// 周滚动窗口用量百分比 (0–100)
     pub weekly_percent: u32,
-    /// Seconds until weekly reset
+    /// 距离周窗口重置的秒数
     pub weekly_reset_sec: u64,
-    /// Monthly usage percent (0-100)
+    /// 月滚动窗口用量百分比 (0–100)
     pub monthly_percent: u32,
-    /// Seconds until monthly reset
+    /// 距离月窗口重置的秒数
     pub monthly_reset_sec: u64,
 }
 

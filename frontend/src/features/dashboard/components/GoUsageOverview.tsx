@@ -15,7 +15,7 @@ export function GoUsageOverview({
   if (!workspace.go_usage) return null;
   const u = workspace.go_usage;
 
-  // Determine overall status
+  // 判断整体状态
   const maxPct = Math.max(u.hourly_percent, u.weekly_percent, u.monthly_percent);
   const statusColor =
     maxPct >= 90

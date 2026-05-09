@@ -25,14 +25,14 @@ async fn main() {
         .init();
 
     let config = config::Config::load("config.yaml").unwrap_or_else(|e| {
-        eprintln!("Failed to load config.yaml: {e}");
+        eprintln!("加载 config.yaml 失败: {e}");
         std::process::exit(1);
     });
 
     let config = Arc::new(RwLock::new(config));
 
     info!(
-        "Starting oc-go-switch, {} account(s) configured",
+        "启动 oc-go-switch，已配置 {} 个账户",
         config.read().await.accounts.len()
     );
 
@@ -40,19 +40,19 @@ async fn main() {
     let pool = match discover(&config_guard).await {
         Ok(p) => p,
         Err(e) => {
-            error!("Failed to discover keys: {e}");
+            error!("发现 key 失败: {e}");
             std::process::exit(1);
         }
     };
 
     let total = pool.keys.len();
     let subscribed = pool.keys.iter().filter(|k| k.subscribed).count();
-    info!("KeyPool ready: {total} keys ({subscribed} with Go subscription)");
+    info!("KeyPool 就绪: {total} 个 key（{subscribed} 个已订阅 Go）");
 
     let log_store = Arc::new(LogStore::new());
     let handle = make_handle(pool, config.clone(), log_store);
 
-    // Spawn background refresh task
+    // 后台定时刷新任务
     let refresh_interval = config.read().await.refresh_interval_secs;
     if refresh_interval > 0 {
         let refresh_handle = handle.clone();
@@ -60,13 +60,13 @@ async fn main() {
         tokio::spawn(async move {
             loop {
                 tokio::time::sleep(std::time::Duration::from_secs(refresh_interval)).await;
-                info!("Background refresh: updating balances...");
+                info!("后台刷新: 更新余额...");
                 let refresh_guard = refresh_config.read().await;
                 match discover(&refresh_guard).await {
                     Ok(mut new_pool) => {
                         drop(refresh_guard);
                         let mut pool = refresh_handle.inner.write().await;
-                        // Only keep depleted if still fully exhausted.
+                        // 只有用量仍完全耗尽才保留 depleted 标记
                         let old_depleted_and_broke: std::collections::HashSet<String> = pool
                             .keys
                             .iter()
@@ -81,10 +81,10 @@ async fn main() {
                         }
                         new_pool.last_refresh_at = Some(Utc::now().to_rfc3339());
                         *pool = new_pool;
-                        info!("Background refresh complete");
+                        info!("后台刷新完成");
                     }
                     Err(e) => {
-                        error!("Background refresh failed: {e}");
+                        error!("后台刷新失败: {e}");
                     }
                 }
             }
@@ -93,24 +93,24 @@ async fn main() {
 
     let listen = config.read().await.listen.clone();
     let addr: SocketAddr = listen.parse().unwrap_or_else(|e: std::net::AddrParseError| {
-        error!("Invalid listen address '{listen}': {e}");
+        error!("无效的监听地址 '{listen}': {e}");
         std::process::exit(1);
     });
 
     let router = build_router(handle);
-    info!("Proxy listening on http://{addr}");
+    info!("代理正在监听 http://{addr}");
 
     let listener = tokio::net::TcpListener::bind(addr)
         .await
         .unwrap_or_else(|e| {
-            error!("Failed to bind {addr}: {e}");
+            error!("绑定 {addr} 失败: {e}");
             std::process::exit(1);
         });
 
     axum::serve(listener, router)
         .await
         .unwrap_or_else(|e: std::io::Error| {
-            error!("Server error: {e}");
+            error!("服务器错误: {e}");
             std::process::exit(1);
         });
 }

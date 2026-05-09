@@ -2,8 +2,7 @@ use crate::config::{FilterAction, ImageFilterConfig};
 use crate::protocol::claude::{AnthropicContent, AnthropicContentBlock, AnthropicMessage};
 use crate::protocol::openai::{ChatContent, ChatMessage, ContentPart};
 
-/// Apply image filtering to OpenAI messages.
-/// Returns true if any modification was made.
+/// 对 OpenAI 消息列表应用图片过滤。返回是否做了修改。
 pub fn filter_openai_messages(
     messages: &mut [ChatMessage],
     model: &str,
@@ -32,7 +31,7 @@ pub fn filter_openai_messages(
                             let text = rule
                                 .replacement
                                 .clone()
-                                .unwrap_or_else(|| "[Image removed]".to_string());
+                                .unwrap_or_else(|| "[图片已移除]".to_string());
                             new_parts.push(ContentPart::Text { text });
                         }
                     },
@@ -44,8 +43,7 @@ pub fn filter_openai_messages(
 
             if modified {
                 if new_parts.is_empty() {
-                    // All parts removed — replace with a placeholder text
-                    msg.content = ChatContent::Text("[All content removed]".to_string());
+                    msg.content = ChatContent::Text("[所有内容已移除]".to_string());
                 } else if new_parts.len() == 1 {
                     if let ContentPart::Text { text } = &new_parts[0] {
                         msg.content = ChatContent::Text(text.clone());
@@ -62,8 +60,7 @@ pub fn filter_openai_messages(
     modified
 }
 
-/// Apply image filtering to Anthropic messages.
-/// Returns true if any modification was made.
+/// 对 Anthropic 消息列表应用图片过滤。返回是否做了修改。
 pub fn filter_claude_messages(
     messages: &mut [AnthropicMessage],
     model: &str,
@@ -92,7 +89,7 @@ pub fn filter_claude_messages(
                             let text = rule
                                 .replacement
                                 .clone()
-                                .unwrap_or_else(|| "[Image removed]".to_string());
+                                .unwrap_or_else(|| "[图片已移除]".to_string());
                             new_blocks.push(AnthropicContentBlock::Text { text });
                         }
                     },
@@ -104,8 +101,7 @@ pub fn filter_claude_messages(
 
             if modified {
                 if new_blocks.is_empty() {
-                    msg.content =
-                        AnthropicContent::Text("[All content removed]".to_string());
+                    msg.content = AnthropicContent::Text("[所有内容已移除]".to_string());
                 } else if new_blocks.len() == 1 {
                     if let AnthropicContentBlock::Text { text } = &new_blocks[0] {
                         msg.content = AnthropicContent::Text(text.clone());

@@ -3,18 +3,19 @@ use std::collections::HashMap;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
-/// OpenAI /v1/chat/completions request body.
+/// OpenAI /v1/chat/completions 请求体。
 #[derive(Debug, Deserialize, Serialize)]
 pub struct ChatCompletionRequest {
     pub model: String,
     pub messages: Vec<ChatMessage>,
     #[serde(default)]
     pub stream: bool,
-    /// All fields not explicitly modeled (temperature, top_p, tools, etc.)
+    /// 所有未显式建模的字段（temperature, top_p, tools 等）完整透传。
     #[serde(flatten)]
     pub extra: HashMap<String, Value>,
 }
 
+/// 消息角色。
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize, Serialize)]
 #[serde(rename_all = "snake_case")]
 pub enum ChatRole {
@@ -25,6 +26,7 @@ pub enum ChatRole {
     Function,
 }
 
+/// 单条消息。
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct ChatMessage {
     pub role: ChatRole,
@@ -33,7 +35,7 @@ pub struct ChatMessage {
     pub name: Option<String>,
 }
 
-/// `content` field: plain text string OR array of content parts.
+/// content 字段：纯文本字符串 或 多模态 content part 数组。
 #[derive(Debug, Clone, Deserialize, Serialize)]
 #[serde(untagged)]
 pub enum ChatContent {
@@ -41,7 +43,7 @@ pub enum ChatContent {
     Parts(Vec<ContentPart>),
 }
 
-/// Multimodal content part, discriminated by `type`.
+/// 多模态 content part，按 type 字段区分。
 #[derive(Debug, Clone, Deserialize, Serialize)]
 #[serde(tag = "type")]
 pub enum ContentPart {
@@ -49,11 +51,12 @@ pub enum ContentPart {
     Text { text: String },
     #[serde(rename = "image_url")]
     ImageUrl { image_url: ImageUrlObj },
-    /// input_audio / file / future types — pass through
+    /// input_audio / file / 未来扩展类型 —— 透传。
     #[serde(untagged)]
     Other(Value),
 }
 
+/// 图片清晰度。
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize, Serialize)]
 #[serde(rename_all = "snake_case")]
 pub enum ImageDetail {
@@ -62,6 +65,7 @@ pub enum ImageDetail {
     High,
 }
 
+/// image_url 对象。
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct ImageUrlObj {
     pub url: String,
@@ -70,14 +74,13 @@ pub struct ImageUrlObj {
 }
 
 impl ChatCompletionRequest {
-    /// Validate required fields after deserialization.
-    /// Returns an error message string if validation fails.
+    /// 反序列化后校验必填字段。
     pub fn validate(&self) -> Result<(), &'static str> {
         if self.model.is_empty() {
-            return Err("'model' is required");
+            return Err("'model' 是必填字段");
         }
         if self.messages.is_empty() {
-            return Err("'messages' is required and must be a non-empty array");
+            return Err("'messages' 是必填字段，且不能为空数组");
         }
         Ok(())
     }

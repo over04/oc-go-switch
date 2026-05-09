@@ -5,8 +5,7 @@ use axum::{
 };
 use serde::Serialize;
 
-/// Build an OpenAI-compatible error response.
-/// Format: `{"error": {"message": "...", "type": "...", "param": "...", "code": "..."}}`
+/// OpenAI 协议错误响应格式: `{"error": {"message": "...", "type": "...", ...}}`
 pub(crate) fn openai_error(
     status: StatusCode,
     message: impl Into<String>,
@@ -38,8 +37,7 @@ pub(crate) fn openai_error(
     })).into_response()
 }
 
-/// Build an Anthropic-compatible error response.
-/// Format: `{"type": "error", "error": {"type": "...", "message": "..."}}`
+/// Anthropic 协议错误响应格式: `{"type": "error", "error": {"type": "...", "message": "..."}}`
 pub(crate) fn anthropic_error(
     status: StatusCode,
     message: impl Into<String>,

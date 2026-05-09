@@ -34,28 +34,26 @@ impl PoolKey {
         }
     }
 
-    /// True when ANY of the three rolling windows is at 100%.
-    /// One window at 100% is enough — upstream will reject requests.
+    /// 三个滚动窗口中任一达到 100% 即为完全耗尽。上游会直接拒绝该 key 的请求。
     pub fn is_fully_exhausted(&self) -> bool {
         self.go_usage.as_ref().is_some_and(|u| {
             u.hourly_percent >= 100 || u.weekly_percent >= 100 || u.monthly_percent >= 100
         })
     }
 
-    /// Worst-case usage percentage across the three windows.
-    /// Keys without go_usage data return 0 (optimistic).
+    /// 三个窗口中用量最高的百分比。没有 go_usage 数据时返回 0（乐观）。
     pub fn max_usage_pct(&self) -> u32 {
         self.go_usage.as_ref().map_or(0, |u| {
             u.hourly_percent.max(u.weekly_percent).max(u.monthly_percent)
         })
     }
 
-    /// Masked key value for display: show first 6 and last 4 chars.
+    /// 脱敏显示 key：显示前 6 位和后 4 位。
     pub fn masked_key(&self) -> String {
         Self::mask_value(&self.key_value)
     }
 
-    /// Static helper: mask an arbitrary key string.
+    /// 静态工具方法：对任意 key 字符串脱敏。
     pub fn mask_value(raw: &str) -> String {
         if raw.len() <= 12 {
             return "***".to_string();

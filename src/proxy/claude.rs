@@ -28,7 +28,7 @@ pub async fn messages(
         Err(e) => {
             return error::anthropic_error(
                 StatusCode::BAD_REQUEST,
-                format!("Invalid request body: {e}"),
+                format!("请求体无效: {e}"),
                 "invalid_request_error",
             );
         }
@@ -52,7 +52,7 @@ pub async fn messages(
         if !image_filter_config.models.is_empty()
             && filter::filter_claude_messages(&mut req.messages, &model, image_filter_config)
         {
-            info!("Image filter applied to model '{model}'");
+            info!("图片过滤已应用于模型 '{model}'");
         }
     }
 
@@ -73,13 +73,13 @@ pub async fn messages(
                         duration_ms: start.elapsed().as_millis() as u64,
                         key_masked: "-".into(),
                         success: false,
-                        error_message: Some("All API keys exhausted".into()),
+                        error_message: Some("所有 API key 已耗尽".into()),
                         stream: is_stream,
                     })
                     .await;
                 return error::anthropic_error(
                     StatusCode::TOO_MANY_REQUESTS,
-                    "All API keys exhausted",
+                    "所有 API key 已耗尽",
                     "server_error",
                 );
             }
@@ -88,7 +88,7 @@ pub async fn messages(
         let upstream_url = format!("{}/messages", handle.config().read().await.go.base_url);
 
         info!(
-            "Forwarding Claude request via key {} (workspace={}, attempt={})",
+            "转发 Claude 请求 key={} workspace={} 第{}次尝试",
             key.masked_key(),
             key.workspace_name,
             _attempt + 1,
@@ -109,7 +109,7 @@ pub async fn messages(
                 let status = r.status();
 
                 if status.is_success() {
-                    info!("Claude request succeeded via key {}", key.masked_key());
+                    info!("Claude 请求成功 key={}", key.masked_key());
                     handle
                         .record_log(LogEntry {
                             timestamp: Utc::now().to_rfc3339(),
@@ -125,7 +125,7 @@ pub async fn messages(
                         .await;
 
                     if is_stream {
-                        return stream::forward_sse_stream(r, false);
+                        return stream::forward_sse_stream(r);
                     }
                     return stream::forward_json_response(r).await;
                 }
@@ -134,7 +134,7 @@ pub async fn messages(
 
                 if is_claude_quota_exhausted(status, &resp_body) {
                     info!(
-                        "Key {} exhausted on Claude endpoint (status={}), switching...",
+                        "key 已耗尽 key={} status={} 切换中...",
                         key.masked_key(),
                         status
                     );
@@ -163,10 +163,7 @@ pub async fn messages(
                 );
             }
             Err(e) => {
-                warn!(
-                    "Network error with key {}: {e}, retrying...",
-                    key.masked_key()
-                );
+                warn!("网络错误 key={}: {e}，重试下一个 key...", key.masked_key());
                 handle
                     .record_log(LogEntry {
                         timestamp: Utc::now().to_rfc3339(),
@@ -194,19 +191,18 @@ pub async fn messages(
             duration_ms: start.elapsed().as_millis() as u64,
             key_masked: "-".into(),
             success: false,
-            error_message: Some("All API keys exhausted after retries".into()),
+            error_message: Some("重试耗尽，所有 API key 不可用".into()),
             stream: is_stream,
         })
         .await;
     error::anthropic_error(
         StatusCode::TOO_MANY_REQUESTS,
-        "All API keys exhausted after retries",
+        "重试耗尽，所有 API key 不可用",
         "server_error",
     )
 }
 
-/// Only real balance/insufficient errors. Generic overloaded_error (529)
-/// and rate limits are NOT quota signals.
+/// 只有 402 / 429 且响应体中包含真实余额关键词时才判定为额度耗尽。
 fn is_claude_quota_exhausted(status: StatusCode, body: &str) -> bool {
     (status == StatusCode::PAYMENT_REQUIRED || status == StatusCode::TOO_MANY_REQUESTS)
         && (body.contains("insufficient")
@@ -222,7 +218,7 @@ fn json_response(status: StatusCode, body: &str) -> Response {
         .unwrap_or_else(|_| {
             Response::builder()
                 .status(StatusCode::INTERNAL_SERVER_ERROR)
-                .body(axum::body::Body::from("Internal proxy error"))
+                .body(axum::body::Body::from("代理内部错误"))
                 .unwrap_or_else(|_| Response::new(axum::body::Body::empty()))
         })
 }

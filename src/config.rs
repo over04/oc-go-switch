@@ -33,16 +33,16 @@ pub struct AccountConfig {
     pub label: String,
 }
 
-/// Image filter action.
+/// 图片过滤行为。
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum FilterAction {
-    /// Keep images as-is (default).
+    /// 保留图片，不做处理（默认）。
     #[serde(rename = "pass_through")]
     PassThrough,
-    /// Remove image blocks entirely.
+    /// 移除图片 block。
     Remove,
-    /// Replace image blocks with text.
+    /// 将图片 block 替换为文本。
     Replace,
 }
 
@@ -54,11 +54,11 @@ pub struct ImageFilterConfig {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ImageFilterModel {
-    /// Model ID (exact match).
+    /// 模型 ID（精确匹配）。
     pub model: String,
-    /// How to handle images for this model.
+    /// 对该模型的图片处理方式。
     pub action: FilterAction,
-    /// Replacement text (only used when action is `replace`).
+    /// 替换文本（仅 action 为 replace 时生效）。
     #[serde(default)]
     pub replacement: Option<String>,
 }

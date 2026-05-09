@@ -46,9 +46,9 @@ export function KeyCardGrid({
   search,
   statusFilter,
 }: KeyCardGridProps) {
-  // Track which workspace cards are expanded
+  // 跟踪哪些工作区卡片已展开
   const [expanded, setExpanded] = useState<Set<string>>(() => {
-    // Default: expand workspaces that have the active key
+    // 默认：展开包含活跃 key 的工作区
     const s = new Set<string>();
     for (const acct of accounts) {
       for (const ws of acct.workspaces) {
