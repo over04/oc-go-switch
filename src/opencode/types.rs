@@ -18,7 +18,6 @@ pub struct ApiKeyEntry {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct BillingInfo {
-    pub balance: i64,
     pub plan: Option<SubscriptionPlan>,
     pub subscribed: bool,
 }

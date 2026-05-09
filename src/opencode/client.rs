@@ -89,12 +89,9 @@ impl OpencodeClient {
             None
         };
 
-        let balance = extract_balance(&html);
-
         let subscribed = plan == Some(SubscriptionPlan::Go);
 
         Ok(BillingInfo {
-            balance,
             plan,
             subscribed,
         })
@@ -134,14 +131,4 @@ impl OpencodeClient {
             monthly_reset_sec: matches[2].0,
         }))
     }
-}
-
-/// Extract balance value from workspace page HTML.
-/// Balance appears as `balance:<number>` in the $R stream data.
-fn extract_balance(html: &str) -> i64 {
-    let re = Regex::new(r#"balance:(-?\d+)"#).unwrap();
-    if let Some(cap) = re.captures(html) {
-        return cap[1].parse::<i64>().unwrap_or(0);
-    }
-    0
 }

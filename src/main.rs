@@ -66,7 +66,7 @@ async fn main() {
                     Ok(mut new_pool) => {
                         drop(refresh_guard);
                         let mut pool = refresh_handle.inner.write().await;
-                        // Only keep depleted if the new balance is still exhausted.
+                        // Only keep depleted if still fully exhausted.
                         let old_depleted_and_broke: std::collections::HashSet<String> = pool
                             .keys
                             .iter()
@@ -74,7 +74,8 @@ async fn main() {
                             .map(|k| k.id.clone())
                             .collect();
                         for k in &mut new_pool.keys {
-                            if old_depleted_and_broke.contains(&k.id) && k.balance_cents <= 0 {
+                            if old_depleted_and_broke.contains(&k.id) && k.is_fully_exhausted()
+                            {
                                 k.depleted = true;
                             }
                         }

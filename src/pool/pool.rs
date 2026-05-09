@@ -16,17 +16,17 @@ use super::selector::StickyKeySelector;
 
 /// Pick the best key ID from the Go-only pool.
 /// Rules:
-/// 1. Only Go-subscribed, non-depleted keys with positive balance
-/// 2. At most 1 key per workspace (highest balance)
-/// 3. Sort by balance desc
+/// 1. Only Go-subscribed, non-depleted, non-fully-exhausted keys
+/// 2. At most 1 key per workspace (lowest usage %)
+/// 3. Sort by usage % ascending (least-used first)
 fn pick_best_key_id(keys: &[PoolKey], depleted_ids: Option<&HashSet<String>>) -> Option<String> {
     let excluded = |id: &str| depleted_ids.is_some_and(|s| s.contains(id));
     let mut best_per_ws: HashMap<&str, &PoolKey> = HashMap::new();
     for k in keys.iter().filter(|k| {
-        !k.depleted && k.subscribed && k.balance_cents > 0 && !excluded(&k.id)
+        !k.depleted && k.subscribed && !k.is_fully_exhausted() && !excluded(&k.id)
     }) {
         let entry = best_per_ws.entry(&k.workspace_id).or_insert(k);
-        if k.balance_cents > entry.balance_cents {
+        if k.max_usage_pct() < entry.max_usage_pct() {
             *entry = k;
         }
     }
@@ -36,7 +36,7 @@ fn pick_best_key_id(keys: &[PoolKey], depleted_ids: Option<&HashSet<String>>) ->
         return None;
     }
 
-    candidates.sort_by(|a, b| b.balance_cents.cmp(&a.balance_cents));
+    candidates.sort_by_key(|a| a.max_usage_pct());
 
     Some(candidates[0].id.clone())
 }
@@ -124,8 +124,6 @@ pub async fn discover(config: &Config) -> anyhow::Result<KeyPool> {
                 .map(|b| b.subscribed && b.plan == Some(SubscriptionPlan::Go))
                 .unwrap_or(false);
 
-            let balance_raw = billing.as_ref().map(|b| b.balance).unwrap_or(0);
-
             // Skip Zen-subscribed workspaces
             if let Some(ref b) = billing {
                 if b.plan == Some(SubscriptionPlan::Zen) {
@@ -155,7 +153,6 @@ pub async fn discover(config: &Config) -> anyhow::Result<KeyPool> {
                     workspace_name: ws.name.clone(),
                     key_value: key_entry.key.clone(),
                     key_name: key_entry.name.clone(),
-                    balance_cents: balance_raw,
                     plan: billing.as_ref().and_then(|b| b.plan),
                     subscribed,
                     depleted: false,
@@ -300,7 +297,7 @@ impl KeyPoolHandle {
     }
 
     /// Mark the current sticky key as depleted, then spawn an async
-    /// background task to refresh the balance for that workspace so
+    /// background task to refresh usage data for that workspace so
     /// the depleted flag stays accurate.
     pub async fn mark_current_depleted(&self) {
         let depleted_info = {
@@ -331,12 +328,12 @@ impl KeyPoolHandle {
                     .await
                 {
                     warn!(
-                        "Background balance refresh failed for workspace {}/{}: {e}",
+                        "Background usage refresh failed for workspace {}/{}: {e}",
                         account_name, ws_id
                     );
                 } else {
                     info!(
-                        "Balance refreshed for depleted key {}",
+                        "Usage refreshed for depleted key {}",
                         PoolKey::mask_value(&key_value)
                     );
                 }
@@ -344,7 +341,7 @@ impl KeyPoolHandle {
         }
     }
 
-    /// Refresh balance and Go usage for a single workspace (lightweight —
+    /// Refresh Go usage for a single workspace (lightweight —
     /// does not run full discovery). Updates all keys belonging to the
     /// same workspace in the pool.
     async fn refresh_workspace_balance(
@@ -373,24 +370,19 @@ impl KeyPoolHandle {
             None
         };
 
-        let balance_raw = billing.balance;
-
         let mut pool = self.inner.write().await;
         for k in &mut pool.keys {
             if k.workspace_id == workspace_id && k.account_name == account_name {
-                k.balance_cents = balance_raw;
                 k.go_usage = go_usage.clone();
-                // If the balance has recovered, lift the depleted flag.
-                if balance_raw > 0 {
+                // If none of the three windows is at 100%, lift depleted.
+                if !k.is_fully_exhausted() {
                     k.depleted = false;
-                    info!("Key {} depleted flag cleared (balance recovered)", k.masked_key());
+                    info!("Key {} depleted flag cleared (usage recovered)", k.masked_key());
                 }
             }
         }
 
-        info!(
-            "Workspace {workspace_id} balance refreshed: {balance_raw} cents",
-        );
+        info!("Workspace {workspace_id} go_usage refreshed");
         Ok(())
     }
 }
