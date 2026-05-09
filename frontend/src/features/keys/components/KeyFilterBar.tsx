@@ -23,12 +23,12 @@ export function KeyFilterBar({
   onStatusFilterChange,
 }: KeyFilterBarProps) {
   return (
-    <div className="flex items-center gap-3">
+    <div className="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-3">
       <Input
         placeholder="搜索密钥或工作区..."
         value={search}
         onChange={(e) => onSearchChange(e.target.value)}
-        className="max-w-[240px]"
+        className="max-w-full sm:max-w-[240px]"
       />
       <div className="flex items-center gap-1 bg-cream-100 rounded-full p-0.5">
         {statusOptions.map((opt) => (

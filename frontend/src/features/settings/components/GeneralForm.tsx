@@ -26,7 +26,7 @@ export function GeneralForm({
         <Input value={listen} disabled className="font-mono opacity-60" />
       </div>
 
-      <div className="grid grid-cols-2 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
         <div>
           <label className="block text-xs font-medium text-espresso-500 mb-1.5">
             刷新间隔（秒）

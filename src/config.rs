@@ -11,6 +11,8 @@ pub struct Config {
     pub max_retries: usize,
     #[serde(default = "default_go")]
     pub go: GoConfig,
+    #[serde(default)]
+    pub image_filter: ImageFilterConfig,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -29,6 +31,36 @@ pub struct AccountConfig {
     pub name: String,
     pub auth: String,
     pub label: String,
+}
+
+/// Image filter action.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum FilterAction {
+    /// Keep images as-is (default).
+    #[serde(rename = "pass_through")]
+    PassThrough,
+    /// Remove image blocks entirely.
+    Remove,
+    /// Replace image blocks with text.
+    Replace,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+pub struct ImageFilterConfig {
+    #[serde(default)]
+    pub models: Vec<ImageFilterModel>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ImageFilterModel {
+    /// Model ID (exact match).
+    pub model: String,
+    /// How to handle images for this model.
+    pub action: FilterAction,
+    /// Replacement text (only used when action is `replace`).
+    #[serde(default)]
+    pub replacement: Option<String>,
 }
 
 fn default_refresh_interval() -> u64 {

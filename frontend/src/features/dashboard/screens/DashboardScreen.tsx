@@ -11,7 +11,7 @@ export function DashboardScreen() {
   if (isPending) {
     return (
       <div className="space-y-6">
-        <div className="grid grid-cols-[1.5fr_1fr_1fr_1fr] gap-4">
+        <div className="grid grid-cols-2 lg:grid-cols-[1.5fr_1fr_1fr_1fr] gap-3 md:gap-4">
           <Skeleton className="h-28" />
           <Skeleton className="h-28" />
           <Skeleton className="h-28" />
@@ -50,7 +50,7 @@ export function DashboardScreen() {
   return (
     <div className="max-w-5xl space-y-8">
       {/* Hero section — asymmetric stat layout */}
-      <div className="grid grid-cols-[1.5fr_1fr_1fr_1fr] gap-4">
+      <div className="grid grid-cols-2 lg:grid-cols-[1.5fr_1fr_1fr_1fr] gap-3 md:gap-4">
         {/* Primary stat — larger, with decorative element */}
         <motion.div
           initial={{ opacity: 0, y: 12 }}

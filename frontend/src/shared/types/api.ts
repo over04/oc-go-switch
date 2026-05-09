@@ -48,12 +48,25 @@ export interface AccountListResponse {
   accounts: AccountListEntry[];
 }
 
+export type FilterAction = "pass_through" | "remove" | "replace";
+
+export interface ImageFilterModel {
+  model: string;
+  action: FilterAction;
+  replacement?: string | null;
+}
+
+export interface ImageFilterConfig {
+  models: ImageFilterModel[];
+}
+
 export interface ConfigResponse {
   listen: string;
   refresh_interval_secs: number;
   max_retries: number;
   go: { base_url: string };
   accounts: AccountListEntry[];
+  image_filter: ImageFilterConfig;
 }
 
 export interface ModelInfo {

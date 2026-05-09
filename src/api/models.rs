@@ -29,7 +29,7 @@ pub struct MergedModelsResponse {
 }
 
 async fn fetch_model_list(handle: &KeyPoolHandle, base_url: &str) -> Result<ModelListResponse, String> {
-    let key = handle.select_key().await.ok_or_else(|| "No available Go key in pool".to_string())?;
+    let key = handle.select_key(None).await.ok_or_else(|| "No available Go key in pool".to_string())?;
     let url = format!("{}/models", base_url);
 
     let resp = handle

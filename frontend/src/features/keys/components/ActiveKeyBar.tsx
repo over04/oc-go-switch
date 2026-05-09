@@ -16,7 +16,7 @@ export function ActiveKeyBar({ activeKeyId, onClear }: ActiveKeyBarProps) {
           exit={{ opacity: 0, height: 0 }}
           className="overflow-hidden"
         >
-          <div className="flex items-center gap-3 bg-terra-500/5 border border-terra-500/15 rounded-mcm-lg px-4 py-2.5">
+          <div className="flex flex-wrap items-center gap-2 sm:gap-3 bg-terra-500/5 border border-terra-500/15 rounded-mcm-lg px-3 md:px-4 py-2.5">
             {/* Pulse dot */}
             <motion.span
               className="relative flex h-2.5 w-2.5"

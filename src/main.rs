@@ -4,6 +4,7 @@ mod config;
 mod model;
 mod opencode;
 mod pool;
+mod protocol;
 mod proxy;
 
 use std::net::SocketAddr;
@@ -65,14 +66,15 @@ async fn main() {
                     Ok(mut new_pool) => {
                         drop(refresh_guard);
                         let mut pool = refresh_handle.inner.write().await;
-                        let old_depleted: std::collections::HashSet<String> = pool
+                        // Only keep depleted if the new balance is still exhausted.
+                        let old_depleted_and_broke: std::collections::HashSet<String> = pool
                             .keys
                             .iter()
                             .filter(|k| k.depleted)
                             .map(|k| k.id.clone())
                             .collect();
                         for k in &mut new_pool.keys {
-                            if old_depleted.contains(&k.id) {
+                            if old_depleted_and_broke.contains(&k.id) && k.balance_cents <= 0 {
                                 k.depleted = true;
                             }
                         }

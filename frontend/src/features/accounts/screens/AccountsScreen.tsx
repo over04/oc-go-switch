@@ -94,7 +94,7 @@ export function AccountsScreen() {
   return (
     <div className="max-w-4xl space-y-5">
       {/* Header */}
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
         <div className="flex items-center gap-3">
           <div className="w-1 h-6 bg-harvest-300 rounded-full" />
           <div>
@@ -129,7 +129,7 @@ export function AccountsScreen() {
             >
               <Card size="sm" className="!p-0 overflow-hidden">
                 {/* Account header */}
-                <div className="flex items-center justify-between px-5 py-3 border-b border-cream-100">
+                <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 px-4 md:px-5 py-3 border-b border-cream-100">
                   <div className="flex items-center gap-3">
                     <span className="w-2 h-2 rounded-full bg-harvest-500" />
                     {editing === acct.name ? (

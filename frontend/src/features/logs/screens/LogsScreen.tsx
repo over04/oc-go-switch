@@ -52,7 +52,7 @@ export function LogsScreen() {
   return (
     <div className="max-w-5xl space-y-5">
       {/* Header */}
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
         <div className="flex items-center gap-3">
           <div className="w-1 h-6 bg-espresso-500 rounded-full" />
           <div>
@@ -70,12 +70,12 @@ export function LogsScreen() {
       </div>
 
       {/* Filters */}
-      <div className="flex items-center gap-3">
+      <div className="flex flex-wrap items-center gap-2 md:gap-3">
         <Input
           placeholder="搜索模型或密钥..."
           value={search}
           onChange={(e) => setSearch(e.target.value)}
-          className="max-w-[240px]"
+          className="max-w-full sm:max-w-[240px]"
         />
         <div className="flex items-center gap-1 bg-cream-100 rounded-full p-0.5">
           {(

@@ -155,12 +155,14 @@ pub struct ConfigResponse {
     pub max_retries: usize,
     pub go: crate::config::GoConfig,
     pub accounts: Vec<AccountListEntry>,
+    pub image_filter: crate::config::ImageFilterConfig,
 }
 
 #[derive(Debug, Deserialize)]
 pub struct UpdateConfigRequest {
     pub refresh_interval_secs: Option<u64>,
     pub max_retries: Option<usize>,
+    pub image_filter: Option<crate::config::ImageFilterConfig>,
 }
 
 /// GET /api/config — full config with masked auth
@@ -181,6 +183,7 @@ pub async fn get_config(State(handle): State<KeyPoolHandle>) -> Json<ConfigRespo
                 auth_masked: mask_auth(&a.auth),
             })
             .collect(),
+        image_filter: config.image_filter.clone(),
     })
 }
 
@@ -197,6 +200,9 @@ pub async fn update_config(
         }
         if let Some(v) = req.max_retries {
             config.max_retries = v;
+        }
+        if let Some(ref v) = req.image_filter {
+            config.image_filter = v.clone();
         }
         save_config(&config)?;
     }

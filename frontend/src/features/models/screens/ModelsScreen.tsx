@@ -90,7 +90,7 @@ export function ModelsScreen() {
         placeholder="搜索模型 ID..."
         value={search}
         onChange={(e) => setSearch(e.target.value)}
-        className="max-w-[280px]"
+        className="max-w-full sm:max-w-[280px]"
       />
 
       {/* Content */}

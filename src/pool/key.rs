@@ -37,11 +37,16 @@ impl PoolKey {
 
     /// Masked key value for display: show first 6 and last 4 chars.
     pub fn masked_key(&self) -> String {
-        if self.key_value.len() <= 12 {
+        Self::mask_value(&self.key_value)
+    }
+
+    /// Static helper: mask an arbitrary key string.
+    pub fn mask_value(raw: &str) -> String {
+        if raw.len() <= 12 {
             return "***".to_string();
         }
-        let prefix = &self.key_value[..6];
-        let suffix = &self.key_value[self.key_value.len() - 4..];
-        format!("{}...{}", prefix, suffix)
+        let prefix = &raw[..6];
+        let suffix = &raw[raw.len() - 4..];
+        format!("{prefix}...{suffix}")
     }
 }

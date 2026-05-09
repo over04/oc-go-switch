@@ -31,6 +31,7 @@ export function updateConfig(
   patch: Partial<{
     refresh_interval_secs: number;
     max_retries: number;
+    image_filter: import("@/shared/types/api").ImageFilterConfig;
   }>,
 ): Promise<ConfigResponse> {
   return fetchJson<ConfigResponse>("/api/config", {

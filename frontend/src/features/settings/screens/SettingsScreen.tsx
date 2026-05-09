@@ -2,10 +2,12 @@ import { useState, useCallback, useEffect } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { motion } from "framer-motion";
 import { GeneralForm } from "../components/GeneralForm";
+import { ImageFilterForm } from "../components/ImageFilterForm";
 import { getConfig, updateConfig } from "../service/settingsService";
 import { toastSuccess, toastError } from "@/shared/lib/toast";
 import { Button } from "@/shared/ui/Button";
 import { Skeleton } from "@/shared/ui/Skeleton";
+import type { ImageFilterModel } from "@/shared/types/api";
 
 const CONFIG_KEY = ["api", "config"] as const;
 
@@ -18,12 +20,14 @@ export function SettingsScreen() {
   });
   const [refreshInterval, setRefreshInterval] = useState(300);
   const [maxRetries, setMaxRetries] = useState(10);
+  const [imageFilterModels, setImageFilterModels] = useState<ImageFilterModel[]>([]);
   const [saving, setSaving] = useState(false);
 
   useEffect(() => {
     if (data) {
       setRefreshInterval(data.refresh_interval_secs);
       setMaxRetries(data.max_retries);
+      setImageFilterModels(data.image_filter?.models ?? []);
     }
   }, [data]);
 
@@ -33,14 +37,16 @@ export function SettingsScreen() {
       await updateConfig({
         refresh_interval_secs: refreshInterval,
         max_retries: maxRetries,
+        image_filter: { models: imageFilterModels },
       });
+      queryClient.invalidateQueries({ queryKey: CONFIG_KEY });
       toastSuccess("配置已保存");
     } catch (e) {
       toastError(e instanceof Error ? e.message : "保存失败");
     } finally {
       setSaving(false);
     }
-  }, [refreshInterval, maxRetries]);
+  }, [refreshInterval, maxRetries, imageFilterModels, queryClient]);
 
   if (isPending)
     return (
@@ -84,12 +90,24 @@ export function SettingsScreen() {
         </div>
       </motion.div>
 
-      <Button
-        size="sm"
-        tone="primary"
-        onClick={handleSave}
-        disabled={saving}
+      <motion.div
+        initial={{ opacity: 0, y: 8 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ delay: 0.1 }}
+        className="bg-white rounded-mcm-lg border border-cream-200 shadow-mcm overflow-hidden"
       >
+        <div className="px-5 py-3 border-b border-cream-100">
+          <h3 className="text-sm font-semibold text-espresso-700">图片过滤</h3>
+        </div>
+        <div className="px-5 py-4">
+          <ImageFilterForm
+            models={imageFilterModels}
+            onChange={setImageFilterModels}
+          />
+        </div>
+      </motion.div>
+
+      <Button size="sm" tone="primary" onClick={handleSave} disabled={saving}>
         {saving ? "保存中..." : "保存配置"}
       </Button>
     </div>

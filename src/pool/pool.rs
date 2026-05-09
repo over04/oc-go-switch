@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
 
 use chrono::Utc;
@@ -16,13 +16,15 @@ use super::selector::StickyKeySelector;
 
 /// Pick the best key ID from the Go-only pool.
 /// Rules:
-/// 1. Only Go-subscribed, non-depleted keys
+/// 1. Only Go-subscribed, non-depleted keys with positive balance
 /// 2. At most 1 key per workspace (highest balance)
 /// 3. Sort by balance desc
-fn pick_best_key_id(keys: &[PoolKey]) -> Option<String> {
-    // Group by workspace_id, pick best (highest balance) per workspace
+fn pick_best_key_id(keys: &[PoolKey], depleted_ids: Option<&HashSet<String>>) -> Option<String> {
+    let excluded = |id: &str| depleted_ids.is_some_and(|s| s.contains(id));
     let mut best_per_ws: HashMap<&str, &PoolKey> = HashMap::new();
-    for k in keys.iter().filter(|k| !k.depleted && k.subscribed) {
+    for k in keys.iter().filter(|k| {
+        !k.depleted && k.subscribed && k.balance_cents > 0 && !excluded(&k.id)
+    }) {
         let entry = best_per_ws.entry(&k.workspace_id).or_insert(k);
         if k.balance_cents > entry.balance_cents {
             *entry = k;
@@ -202,38 +204,44 @@ pub fn make_handle(
 }
 
 impl KeyPoolHandle {
-    /// Select a key (sticky), returning a clone of the selected PoolKey.
-    /// Triggers an immediate pool refresh when all keys are exhausted.
-    pub async fn select_key(&self) -> Option<PoolKey> {
-        // First, check if the current sticky key is still valid (read lock)
+    /// Select a key. Pass `depleted_ids` to skip keys already exhausted
+    /// during this request; pass `None` for general use.
+    pub async fn select_key(
+        &self,
+        depleted_ids: Option<&HashSet<String>>,
+    ) -> Option<PoolKey> {
+        let excluded = |id: &str| depleted_ids.is_some_and(|s| s.contains(id));
+
         {
             let pool = self.inner.read().await;
             let current_id = pool.selector.current_id().cloned();
             if let Some(ref id) = current_id {
-                if let Some(key) = pool.keys.iter().find(|k| &k.id == id && !k.depleted && k.subscribed) {
+                if let Some(key) = pool.keys.iter().find(|k| {
+                    &k.id == id && !k.depleted && k.subscribed && !excluded(&k.id)
+                }) {
                     return Some(key.clone());
                 }
             }
         }
 
-        // Try to pick a new best key
-        if let Some(key) = self.pick_and_set_key().await {
+        if let Some(key) = self.pick_and_set_key(depleted_ids).await {
             return Some(key);
         }
 
-        // No available key — trigger immediate refresh and retry
-        if self.trigger_refresh().await {
-            return self.pick_and_set_key().await;
+        if self.trigger_refresh(depleted_ids).await {
+            return self.pick_and_set_key(depleted_ids).await;
         }
 
         None
     }
 
-    /// Pick best key and update selector. Returns the selected key.
-    async fn pick_and_set_key(&self) -> Option<PoolKey> {
+    async fn pick_and_set_key(
+        &self,
+        depleted_ids: Option<&HashSet<String>>,
+    ) -> Option<PoolKey> {
         let picked_id: Option<String> = {
             let pool = self.inner.read().await;
-            pick_best_key_id(&pool.keys)
+            pick_best_key_id(&pool.keys, depleted_ids)
         };
 
         if let Some(ref id) = picked_id {
@@ -245,14 +253,25 @@ impl KeyPoolHandle {
         None
     }
 
-    /// Trigger an immediate pool refresh (e.g. when all keys are exhausted).
-    /// Returns true if the refresh succeeded.
-    pub async fn trigger_refresh(&self) -> bool {
+    /// Trigger an immediate pool refresh. Keys in `depleted_ids` are
+    /// marked depleted after the new pool is loaded so they are not
+    /// re-selected during the same request.
+    pub async fn trigger_refresh(
+        &self,
+        depleted_ids: Option<&HashSet<String>>,
+    ) -> bool {
         let config_guard = self.config.read().await;
         match discover(&config_guard).await {
             Ok(mut new_pool) => {
                 drop(config_guard);
-                let best_id = pick_best_key_id(&new_pool.keys);
+                if let Some(ids) = depleted_ids {
+                    for k in &mut new_pool.keys {
+                        if ids.contains(&k.id) {
+                            k.depleted = true;
+                        }
+                    }
+                }
+                let best_id = pick_best_key_id(&new_pool.keys, depleted_ids);
                 new_pool.selector = super::selector::StickyKeySelector::new();
                 if let Some(ref id) = best_id {
                     new_pool.selector.set_current(id.clone());
@@ -280,17 +299,98 @@ impl KeyPoolHandle {
         self.log_store.record(entry).await;
     }
 
-    /// Mark the current sticky key as depleted.
+    /// Mark the current sticky key as depleted, then spawn an async
+    /// background task to refresh the balance for that workspace so
+    /// the depleted flag stays accurate.
     pub async fn mark_current_depleted(&self) {
+        let depleted_info = {
+            let mut pool = self.inner.write().await;
+            let current_id = pool.selector.current_id().cloned();
+            let mut target: Option<(String, String, String)> = None;
+            if let Some(ref id) = current_id {
+                for k in &mut pool.keys {
+                    if k.id == *id {
+                        k.depleted = true;
+                        target = Some((
+                            k.account_name.clone(),
+                            k.workspace_id.clone(),
+                            k.key_value.clone(),
+                        ));
+                    }
+                }
+            }
+            pool.selector.reset();
+            target
+        };
+
+        if let Some((account_name, ws_id, key_value)) = depleted_info {
+            let handle = self.clone();
+            tokio::spawn(async move {
+                if let Err(e) = handle
+                    .refresh_workspace_balance(&account_name, &ws_id)
+                    .await
+                {
+                    warn!(
+                        "Background balance refresh failed for workspace {}/{}: {e}",
+                        account_name, ws_id
+                    );
+                } else {
+                    info!(
+                        "Balance refreshed for depleted key {}",
+                        PoolKey::mask_value(&key_value)
+                    );
+                }
+            });
+        }
+    }
+
+    /// Refresh balance and Go usage for a single workspace (lightweight —
+    /// does not run full discovery). Updates all keys belonging to the
+    /// same workspace in the pool.
+    async fn refresh_workspace_balance(
+        &self,
+        account_name: &str,
+        workspace_id: &str,
+    ) -> Result<(), anyhow::Error> {
+        let account = {
+            let config = self.config.read().await;
+            config
+                .accounts
+                .iter()
+                .find(|a| a.name == account_name)
+                .cloned()
+                .ok_or_else(|| anyhow::anyhow!("Account '{account_name}' not found in config"))?
+        };
+
+        let oc = OpencodeClient::new(&account.name, &account.auth);
+        let billing = oc.get_billing(workspace_id).await?;
+        let go_usage = if billing.subscribed {
+            oc.get_go_usage(workspace_id).await.unwrap_or_else(|e| {
+                warn!("Failed to get Go usage for workspace '{workspace_id}': {e}");
+                None
+            })
+        } else {
+            None
+        };
+
+        let balance_raw = billing.balance;
+
         let mut pool = self.inner.write().await;
-        let current_id = pool.selector.current_id().cloned();
-        if let Some(id) = current_id {
-            for k in &mut pool.keys {
-                if k.id == id {
-                    k.depleted = true;
+        for k in &mut pool.keys {
+            if k.workspace_id == workspace_id && k.account_name == account_name {
+                k.balance_cents = balance_raw;
+                k.go_usage = go_usage.clone();
+                // If the balance has recovered, lift the depleted flag.
+                if balance_raw > 0 {
+                    k.depleted = false;
+                    info!("Key {} depleted flag cleared (balance recovered)", k.masked_key());
                 }
             }
         }
-        pool.selector.reset();
+
+        info!(
+            "Workspace {workspace_id} balance refreshed: {balance_raw} cents",
+        );
+        Ok(())
     }
 }
