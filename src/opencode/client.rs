@@ -81,20 +81,23 @@ impl OpencodeClient {
     pub async fn get_billing(&self, workspace_id: &str) -> Result<BillingInfo, ServerFnError> {
         let html = self.fetch_workspace_page(workspace_id).await?;
 
-        let plan = if html.contains(r#"plan:\"lite\""#) || html.contains("plan:\"lite\"") {
+        // Go 订阅：liteSubscriptionID 非空（如 liteSubscriptionID:"sub_xxx"）
+        let has_go = html.contains("liteSubscriptionID:\"sub_");
+
+        let plan = if has_go {
             Some(SubscriptionPlan::Go)
-        } else if html.contains(r#"plan:\"zen\""#) || html.contains("plan:\"zen\"") {
+        } else if html.contains("subscriptionPlan:\"zen\"") {
             Some(SubscriptionPlan::Zen)
         } else {
             None
         };
 
-        let subscribed = plan == Some(SubscriptionPlan::Go);
+        let subscribed = has_go;
 
         Ok(BillingInfo { plan, subscribed })
     }
 
-    /// 从工作区 Go 页面刮取 Go 用量数据。仅对已知有 Go 订阅的工作区调用。
+    /// 从工作区 Go 页面刮取 Go 用量数据。
     pub async fn get_go_usage(
         &self,
         workspace_id: &str,

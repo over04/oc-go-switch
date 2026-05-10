@@ -104,7 +104,13 @@ pub async fn discover(config: &Config) -> anyhow::Result<KeyPool> {
                 }
             };
 
-            let billing = oc.get_billing(&ws.id).await.ok();
+            let billing = match oc.get_billing(&ws.id).await {
+                Ok(b) => Some(b),
+                Err(e) => {
+                    warn!("获取工作区 '{}' 的账单信息失败: {e}", ws.name);
+                    None
+                }
+            };
             let go_usage = match &billing {
                 Some(b) if b.subscribed => match oc.get_go_usage(&ws.id).await {
                     Ok(u) => u,
