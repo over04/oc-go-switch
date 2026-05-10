@@ -6,4 +6,5 @@ frontend/dist/
 *.md
 !CLAUDE.md
 cookie.json
+config.json
 .env
