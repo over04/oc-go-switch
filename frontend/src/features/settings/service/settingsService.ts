@@ -56,16 +56,18 @@ export function editAccount(
   });
 }
 
-export function setActiveKey(keyId: string): Promise<string> {
-  return fetchJson<string>("/api/pool/active-key", {
+export function setActiveKey(
+  keyId: string,
+): Promise<{ status: string }> {
+  return fetchJson<{ status: string }>("/api/pool/active-key", {
     method: "PUT",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ key_id: keyId }),
   });
 }
 
-export function clearActiveKey(): Promise<string> {
-  return fetchJson<string>("/api/pool/active-key", {
+export function clearActiveKey(): Promise<{ status: string }> {
+  return fetchJson<{ status: string }>("/api/pool/active-key", {
     method: "DELETE",
   });
 }

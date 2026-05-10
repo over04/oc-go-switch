@@ -223,22 +223,28 @@ pub struct SetActiveKeyRequest {
 pub async fn set_active_key(
     State(handle): State<KeyPoolHandle>,
     Json(req): Json<SetActiveKeyRequest>,
-) -> Result<&'static str, StatusCode> {
+) -> Result<Json<serde_json::Value>, StatusCode> {
     let mut pool = handle.inner.write().await;
-    if !pool.keys.iter().any(|k| k.id == req.key_id && !k.depleted) {
+    if !pool
+        .keys
+        .iter()
+        .any(|k| k.id == req.key_id && !k.depleted && !k.is_fully_exhausted())
+    {
         return Err(StatusCode::NOT_FOUND);
     }
     pool.selector.set_current(req.key_id);
     info!("已手动设置活跃 key");
-    Ok("ok")
+    Ok(Json(serde_json::json!({"status": "ok"})))
 }
 
 /// DELETE /api/pool/active-key — 清除活跃 key（恢复自动选择）
-pub async fn clear_active_key(State(handle): State<KeyPoolHandle>) -> &'static str {
+pub async fn clear_active_key(
+    State(handle): State<KeyPoolHandle>,
+) -> Json<serde_json::Value> {
     let mut pool = handle.inner.write().await;
     pool.selector.reset();
     info!("已清除活跃 key");
-    "ok"
+    Json(serde_json::json!({"status": "ok"}))
 }
 
 // ── 账户编辑 ─────────────────────────────────────────────────
