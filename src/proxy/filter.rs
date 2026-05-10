@@ -1,3 +1,5 @@
+use std::collections::HashMap;
+
 use crate::config::{FilterAction, ImageFilterConfig};
 use crate::protocol::claude::{AnthropicContent, AnthropicContentBlock, AnthropicMessage};
 use crate::protocol::openai::{ChatContent, ChatMessage, ContentPart};
@@ -14,7 +16,7 @@ pub fn filter_openai_messages(
 
     let mut modified = false;
     for msg in messages.iter_mut() {
-        if let ChatContent::Parts(ref parts) = msg.content {
+        if let Some(ChatContent::Parts(ref parts)) = msg.content {
             let mut new_parts: Vec<ContentPart> = Vec::new();
 
             for part in parts {
@@ -32,7 +34,10 @@ pub fn filter_openai_messages(
                                 .replacement
                                 .clone()
                                 .unwrap_or_else(|| "[图片已移除]".to_string());
-                            new_parts.push(ContentPart::Text { text });
+                            new_parts.push(ContentPart::Text {
+                                text,
+                                extra: HashMap::new(),
+                            });
                         }
                     },
                     other => {
@@ -43,15 +48,15 @@ pub fn filter_openai_messages(
 
             if modified {
                 if new_parts.is_empty() {
-                    msg.content = ChatContent::Text("[所有内容已移除]".to_string());
+                    msg.content = Some(ChatContent::Text("[所有内容已移除]".to_string()));
                 } else if new_parts.len() == 1 {
-                    if let ContentPart::Text { text } = &new_parts[0] {
-                        msg.content = ChatContent::Text(text.clone());
+                    if let ContentPart::Text { text, .. } = &new_parts[0] {
+                        msg.content = Some(ChatContent::Text(text.clone()));
                     } else {
-                        msg.content = ChatContent::Parts(new_parts);
+                        msg.content = Some(ChatContent::Parts(new_parts));
                     }
                 } else {
-                    msg.content = ChatContent::Parts(new_parts);
+                    msg.content = Some(ChatContent::Parts(new_parts));
                 }
             }
         }
@@ -90,7 +95,10 @@ pub fn filter_claude_messages(
                                 .replacement
                                 .clone()
                                 .unwrap_or_else(|| "[图片已移除]".to_string());
-                            new_blocks.push(AnthropicContentBlock::Text { text });
+                            new_blocks.push(AnthropicContentBlock::Text {
+                                text,
+                                extra: HashMap::new(),
+                            });
                         }
                     },
                     other => {
@@ -103,7 +111,7 @@ pub fn filter_claude_messages(
                 if new_blocks.is_empty() {
                     msg.content = AnthropicContent::Text("[所有内容已移除]".to_string());
                 } else if new_blocks.len() == 1 {
-                    if let AnthropicContentBlock::Text { text } = &new_blocks[0] {
+                    if let AnthropicContentBlock::Text { text, .. } = &new_blocks[0] {
                         msg.content = AnthropicContent::Text(text.clone());
                     } else {
                         msg.content = AnthropicContent::Blocks(new_blocks);
