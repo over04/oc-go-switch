@@ -184,7 +184,7 @@ function ModelPicker({
       case "Enter":
         e.preventDefault();
         if (open && focusIdx >= 0 && focusIdx < filtered.length) {
-          onChange(filtered[focusIdx]);
+          onChange(filtered[focusIdx]!);
           setOpen(false);
         }
         break;

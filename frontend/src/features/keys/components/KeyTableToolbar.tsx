@@ -11,6 +11,19 @@ interface KeyTableToolbarProps {
   onGoFilterChange: (v: "all" | "go" | "nongo") => void;
 }
 
+const STATUS_OPTIONS = [
+  { value: "all", label: "全部状态" },
+  { value: "active", label: "活跃" },
+  { value: "idle", label: "空闲" },
+  { value: "depleted", label: "耗尽" },
+];
+
+const GO_OPTIONS = [
+  { value: "all", label: "全部类型" },
+  { value: "go", label: "Go 订阅" },
+  { value: "nongo", label: "非 Go" },
+];
+
 export function KeyTableToolbar({
   search,
   onSearchChange,
@@ -29,21 +42,14 @@ export function KeyTableToolbar({
       />
       <Select
         value={statusFilter}
-        onChange={(e) => onStatusFilterChange(e.target.value as KeyStatus | "all")}
-      >
-        <option value="all">全部状态</option>
-        <option value="active">活跃</option>
-        <option value="idle">空闲</option>
-        <option value="depleted">耗尽</option>
-      </Select>
+        onChange={(v) => onStatusFilterChange(v as KeyStatus | "all")}
+        options={STATUS_OPTIONS}
+      />
       <Select
         value={goFilter}
-        onChange={(e) => onGoFilterChange(e.target.value as "all" | "go" | "nongo")}
-      >
-        <option value="all">全部类型</option>
-        <option value="go">Go 订阅</option>
-        <option value="nongo">非 Go</option>
-      </Select>
+        onChange={(v) => onGoFilterChange(v as "all" | "go" | "nongo")}
+        options={GO_OPTIONS}
+      />
     </div>
   );
 }

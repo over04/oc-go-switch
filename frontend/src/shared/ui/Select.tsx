@@ -70,7 +70,7 @@ export function Select({
       case "Enter":
         e.preventDefault();
         if (open && focusIdx >= 0 && focusIdx < options.length) {
-          onChange(options[focusIdx].value);
+          onChange(options[focusIdx]!.value);
           setOpen(false);
         } else {
           setOpen(!open);
