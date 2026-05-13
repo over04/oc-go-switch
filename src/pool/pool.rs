@@ -216,7 +216,7 @@ impl KeyPoolHandle {
             let current_id = pool.selector.current_id().cloned();
             if let Some(ref id) = current_id {
                 if let Some(key) = pool.keys.iter().find(|k| {
-                    &k.id == id && !k.depleted && k.subscribed && !excluded(&k.id)
+                    &k.id == id && !k.depleted && k.subscribed && !k.is_fully_exhausted() && !excluded(&k.id)
                 }) {
                     return Some(key.clone());
                 }
@@ -258,6 +258,11 @@ impl KeyPoolHandle {
         &self,
         depleted_ids: Option<&HashSet<String>>,
     ) -> bool {
+        let old_sticky_id = {
+            let pool = self.inner.read().await;
+            pool.selector.current_id().cloned()
+        };
+
         let config_guard = self.config.read().await;
         match discover(&config_guard).await {
             Ok(mut new_pool) => {
@@ -269,10 +274,19 @@ impl KeyPoolHandle {
                         }
                     }
                 }
-                let best_id = pick_best_key_id(&new_pool.keys, depleted_ids);
                 new_pool.selector = super::selector::StickyKeySelector::new();
-                if let Some(ref id) = best_id {
-                    new_pool.selector.set_current(id.clone());
+                if let Some(ref old_id) = old_sticky_id {
+                    let still_viable = new_pool.keys.iter().any(|k| {
+                        &k.id == old_id && !k.depleted && k.subscribed && !k.is_fully_exhausted()
+                    });
+                    if still_viable {
+                        new_pool.selector.set_current(old_id.clone());
+                        info!("刷新后保留 sticky key: {}", old_id);
+                    } else if let Some(id) = pick_best_key_id(&new_pool.keys, depleted_ids) {
+                        new_pool.selector.set_current(id);
+                    }
+                } else if let Some(id) = pick_best_key_id(&new_pool.keys, depleted_ids) {
+                    new_pool.selector.set_current(id);
                 }
                 let now = Utc::now().to_rfc3339();
                 new_pool.last_refresh_at = Some(now);

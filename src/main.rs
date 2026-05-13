@@ -73,6 +73,7 @@ async fn main() {
                             .filter(|k| k.depleted)
                             .map(|k| k.id.clone())
                             .collect();
+                        let old_sticky_id = pool.selector.current_id().cloned();
                         for k in &mut new_pool.keys {
                             if old_depleted_and_broke.contains(&k.id) && k.is_fully_exhausted()
                             {
@@ -80,6 +81,15 @@ async fn main() {
                             }
                         }
                         new_pool.last_refresh_at = Some(Utc::now().to_rfc3339());
+                        if let Some(ref old_id) = old_sticky_id {
+                            let still_viable = new_pool.keys.iter().any(|k| {
+                                &k.id == old_id && !k.depleted && k.subscribed && !k.is_fully_exhausted()
+                            });
+                            if still_viable {
+                                new_pool.selector.set_current(old_id.clone());
+                                info!("后台刷新后保留 sticky key: {}", old_id);
+                            }
+                        }
                         *pool = new_pool;
                         info!("后台刷新完成");
                     }
