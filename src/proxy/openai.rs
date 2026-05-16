@@ -94,11 +94,18 @@ pub async fn chat_completions(
         let upstream_url =
             format!("{}/chat/completions", handle.config().read().await.go.base_url);
 
-        let mut upstream_value = serde_json::to_value(&req).unwrap_or_default();
+        let mut upstream_value = serde_json::to_value(&req).map_err(|e| {
+            tracing::error!("序列化请求失败: {e}");
+        }).unwrap_or_default();
         upstream_value["api_key"] =
             serde_json::Value::String(key.key_value.clone());
-        let upstream_bytes = serde_json::to_vec(&upstream_value).unwrap_or_default();
-
+        let upstream_bytes = match serde_json::to_vec(&upstream_value) {
+            Ok(b) => b,
+            Err(e) => {
+                tracing::error!("序列化上游请求失败: {e}");
+                continue;
+            }
+        };
         info!(
             "转发请求 key={} workspace={} 第{}次尝试",
             key.masked_key(),
@@ -177,7 +184,9 @@ pub async fn chat_completions(
                 );
             }
             Err(e) => {
-                warn!("网络错误 key={}: {e}，重试下一个 key...", key.masked_key());
+                warn!("网络错误 key={}: {e}，切换 key...", key.masked_key());
+                depleted_ids.insert(key.id.clone());
+                handle.mark_current_depleted().await;
                 handle
                     .record_log(LogEntry {
                         timestamp: Utc::now().to_rfc3339(),
@@ -222,8 +231,8 @@ pub async fn chat_completions(
 /// 泛化的 rate_limit、overloaded_error、context_length_exceeded 不会误触发。
 fn is_quota_exhausted(status: StatusCode, body: &str) -> bool {
     (status == StatusCode::PAYMENT_REQUIRED || status == StatusCode::TOO_MANY_REQUESTS)
-        && (body.contains("insufficient")
-            || body.contains("quota")
+        && (body.contains("insufficient_quota")
+            || body.contains("insufficient")
             || body.contains("balance"))
 }
 

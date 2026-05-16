@@ -41,9 +41,9 @@ impl PoolKey {
         })
     }
 
-    /// 三个窗口中用量最高的百分比。没有 go_usage 数据时返回 0（乐观）。
+    /// 三个窗口中用量最高的百分比。没有 go_usage 数据时返回 u32::MAX（排到最后）。
     pub fn max_usage_pct(&self) -> u32 {
-        self.go_usage.as_ref().map_or(0, |u| {
+        self.go_usage.as_ref().map_or(u32::MAX, |u| {
             u.hourly_percent.max(u.weekly_percent).max(u.monthly_percent)
         })
     }
@@ -58,8 +58,8 @@ impl PoolKey {
         if raw.len() <= 12 {
             return "***".to_string();
         }
-        let prefix = &raw[..6];
-        let suffix = &raw[raw.len() - 4..];
+        let prefix: String = raw.chars().take(6).collect();
+        let suffix: String = raw.chars().rev().take(4).collect::<Vec<_>>().into_iter().rev().collect();
         format!("{prefix}...{suffix}")
     }
 }

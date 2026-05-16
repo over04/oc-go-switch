@@ -58,8 +58,17 @@ pub async fn messages(
 
     let max_retries = handle.config().read().await.max_retries;
     let mut depleted_ids: HashSet<String> = HashSet::new();
-    let upstream_bytes = serde_json::to_vec(&req).unwrap_or_default();
-
+    let upstream_bytes = match serde_json::to_vec(&req) {
+        Ok(b) => b,
+        Err(e) => {
+            tracing::error!("序列化上游请求失败: {e}");
+            return error::anthropic_error(
+                StatusCode::BAD_REQUEST,
+                "无效的请求体",
+                "invalid_request_error",
+            );
+        }
+    };
     for _attempt in 0..=max_retries {
         let key = match handle.select_key(Some(&depleted_ids)).await {
             Some(k) => k,
@@ -163,7 +172,9 @@ pub async fn messages(
                 );
             }
             Err(e) => {
-                warn!("网络错误 key={}: {e}，重试下一个 key...", key.masked_key());
+                warn!("网络错误 key={}: {e}，切换 key...", key.masked_key());
+                depleted_ids.insert(key.id.clone());
+                handle.mark_current_depleted().await;
                 handle
                     .record_log(LogEntry {
                         timestamp: Utc::now().to_rfc3339(),
@@ -205,8 +216,8 @@ pub async fn messages(
 /// 只有 402 / 429 且响应体中包含真实余额关键词时才判定为额度耗尽。
 fn is_claude_quota_exhausted(status: StatusCode, body: &str) -> bool {
     (status == StatusCode::PAYMENT_REQUIRED || status == StatusCode::TOO_MANY_REQUESTS)
-        && (body.contains("insufficient")
-            || body.contains("quota")
+        && (body.contains("insufficient_quota")
+            || body.contains("insufficient")
             || body.contains("balance"))
 }
 

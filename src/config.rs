@@ -13,6 +13,9 @@ pub struct Config {
     pub go: GoConfig,
     #[serde(default)]
     pub image_filter: ImageFilterConfig,
+    /// API token for management endpoints. If unset, management API is disabled.
+    #[serde(default)]
+    pub api_token: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -75,6 +78,17 @@ impl Config {
     pub fn load(path: impl AsRef<Path>) -> Result<Self, anyhow::Error> {
         let content = std::fs::read_to_string(path)?;
         let config: Config = serde_yaml::from_str(&content)?;
+        if config.max_retries > 100 {
+            return Err(anyhow::anyhow!(
+                "max_retries 不能超过 100，当前值为 {}",
+                config.max_retries
+            ));
+        }
+        if config.api_token.is_none() {
+            return Err(anyhow::anyhow!(
+                "config.yaml 缺少 api_token，管理 API 将不可用。请在 config.yaml 中设置 api_token"
+            ));
+        }
         Ok(config)
     }
 }

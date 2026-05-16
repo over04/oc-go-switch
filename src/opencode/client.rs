@@ -1,11 +1,15 @@
 use regex::Regex;
 use reqwest::Client;
+use std::sync::OnceLock;
 
 use super::serverfn::{self, ServerFnError};
 use super::types::{ApiKeyEntry, BillingInfo, GoUsage, SubscriptionPlan, Workspace};
 
 const GET_WORKSPACES_HASH: &str =
     "def39973159c7f0483d8793a822b8dbb10d067e12c65455fcb4608459ba0234f";
+
+static KEY_REGEX: OnceLock<Regex> = OnceLock::new();
+static USAGE_REGEX: OnceLock<Regex> = OnceLock::new();
 
 pub struct OpencodeClient {
     client: Client,
@@ -14,25 +18,24 @@ pub struct OpencodeClient {
 }
 
 impl OpencodeClient {
-    pub fn new(account_name: &str, auth_cookie: &str) -> Self {
+    pub fn new(account_name: &str, auth_cookie: &str) -> Result<Self, String> {
         let cookie_raw = format!("auth={}", auth_cookie);
+        let header_value = reqwest::header::HeaderValue::from_str(&cookie_raw)
+            .map_err(|e| format!("无效的 auth cookie: {e}"))?;
         let client = Client::builder()
             .cookie_store(true)
             .default_headers({
                 let mut headers = reqwest::header::HeaderMap::new();
-                headers.insert(
-                    reqwest::header::COOKIE,
-                    reqwest::header::HeaderValue::from_str(&cookie_raw).unwrap(),
-                );
+                headers.insert(reqwest::header::COOKIE, header_value);
                 headers
             })
             .build()
-            .expect("构建 reqwest client 失败");
+            .map_err(|e| format!("构建 reqwest client 失败: {e}"))?;
 
-        Self {
+        Ok(Self {
             client,
             account_name: account_name.to_string(),
-        }
+        })
     }
 
     /// 发现该账户下的所有工作区。
@@ -59,8 +62,9 @@ impl OpencodeClient {
     /// 从工作区页面 HTML 刮取 API key。
     pub async fn list_keys(&self, workspace_id: &str) -> Result<Vec<ApiKeyEntry>, ServerFnError> {
         let html = self.fetch_workspace_page(workspace_id).await?;
-        let re = Regex::new(r#"sk-[a-zA-Z0-9]{40,80}"#).unwrap();
-
+        let re = KEY_REGEX.get_or_init(|| {
+            Regex::new(r#"sk-[a-zA-Z0-9]{40,80}"#).expect("hardcoded key regex")
+        });
         let keys: Vec<ApiKeyEntry> = re
             .find_iter(&html)
             .map(|m| {
@@ -104,9 +108,9 @@ impl OpencodeClient {
     ) -> Result<Option<GoUsage>, ServerFnError> {
         let html = self.fetch_go_page(workspace_id).await?;
 
-        // 解析滚动用量块: {status:"ok",resetInSec:NNN,usagePercent:NN}
-        let re = Regex::new(r#"\bresetInSec:(\d+),usagePercent:(\d+)"#).unwrap();
-
+        let re = USAGE_REGEX.get_or_init(|| {
+            Regex::new(r#"\bresetInSec:(\d+),usagePercent:(\d+)"#).expect("hardcoded go_usage regex")
+        });
         let mut matches: Vec<(u64, u32)> = Vec::new();
         for caps in re.captures_iter(&html) {
             if matches.len() >= 3 {

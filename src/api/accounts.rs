@@ -52,6 +52,9 @@ pub async fn add_account(
     if req.name.is_empty() || req.auth.is_empty() || req.label.is_empty() {
         return Err(StatusCode::BAD_REQUEST);
     }
+    if req.name.len() > 128 || req.label.len() > 256 || req.auth.len() > 4096 {
+        return Err(StatusCode::BAD_REQUEST);
+    }
 
     {
         let cfg = handle.config();
@@ -67,14 +70,25 @@ pub async fn add_account(
         save_config(&config)?;
     }
 
-    // 后台触发重新发现
     let h = handle.clone();
     tokio::spawn(async move {
+        let old_sticky_id = {
+            let pool = h.inner.read().await;
+            pool.selector.current_id().cloned()
+        };
         let cfg_arc = h.config();
         let config_guard = cfg_arc.read().await;
         match discover(&config_guard).await {
-            Ok(new_pool) => {
+            Ok(mut new_pool) => {
                 drop(config_guard);
+                if let Some(ref old_id) = old_sticky_id {
+                    let viable = new_pool.keys.iter().any(|k| {
+                        &k.id == old_id && !k.depleted && k.subscribed && !k.is_fully_exhausted()
+                    });
+                    if viable {
+                        new_pool.selector.set_current(old_id.clone());
+                    }
+                }
                 let mut pool = h.inner.write().await;
                 *pool = new_pool;
             }
@@ -107,11 +121,23 @@ pub async fn delete_account(
     // 后台触发重新发现
     let h = handle.clone();
     tokio::spawn(async move {
+        let old_sticky_id = {
+            let pool = h.inner.read().await;
+            pool.selector.current_id().cloned()
+        };
         let cfg_arc = h.config();
         let config_guard = cfg_arc.read().await;
         match discover(&config_guard).await {
-            Ok(new_pool) => {
+            Ok(mut new_pool) => {
                 drop(config_guard);
+                if let Some(ref old_id) = old_sticky_id {
+                    let viable = new_pool.keys.iter().any(|k| {
+                        &k.id == old_id && !k.depleted && k.subscribed && !k.is_fully_exhausted()
+                    });
+                    if viable {
+                        new_pool.selector.set_current(old_id.clone());
+                    }
+                }
                 let mut pool = h.inner.write().await;
                 *pool = new_pool;
             }
@@ -129,13 +155,25 @@ pub async fn delete_account(
 pub async fn force_refresh(
     State(handle): State<KeyPoolHandle>,
 ) -> Result<&'static str, StatusCode> {
+    let old_sticky_id = {
+        let pool = handle.inner.read().await;
+        pool.selector.current_id().cloned()
+    };
     let h = handle.clone();
     let cfg_arc = h.config();
     let config_guard = cfg_arc.read().await;
     match discover(&config_guard).await {
-        Ok(new_pool) => {
+        Ok(mut new_pool) => {
             let count = new_pool.keys.len();
             drop(config_guard);
+            if let Some(ref old_id) = old_sticky_id {
+                let viable = new_pool.keys.iter().any(|k| {
+                    &k.id == old_id && !k.depleted && k.subscribed && !k.is_fully_exhausted()
+                });
+                if viable {
+                    new_pool.selector.set_current(old_id.clone());
+                }
+            }
             let mut pool = h.inner.write().await;
             *pool = new_pool;
             info!("强制刷新完成: {} 个 key", count);
@@ -158,6 +196,8 @@ pub struct ConfigResponse {
     pub go: crate::config::GoConfig,
     pub accounts: Vec<AccountListEntry>,
     pub image_filter: crate::config::ImageFilterConfig,
+    /// 是否已配置 API token（不返回 token 原文）。
+    pub api_token_set: bool,
 }
 
 #[derive(Debug, Deserialize)]
@@ -165,6 +205,7 @@ pub struct UpdateConfigRequest {
     pub refresh_interval_secs: Option<u64>,
     pub max_retries: Option<usize>,
     pub image_filter: Option<crate::config::ImageFilterConfig>,
+    pub api_token: Option<String>,
 }
 
 /// GET /api/config — 获取完整配置（auth 脱敏）
@@ -186,6 +227,7 @@ pub async fn get_config(State(handle): State<KeyPoolHandle>) -> Json<ConfigRespo
             })
             .collect(),
         image_filter: config.image_filter.clone(),
+        api_token_set: config.api_token.is_some(),
     })
 }
 
@@ -201,12 +243,20 @@ pub async fn update_config(
             config.refresh_interval_secs = v;
         }
         if let Some(v) = req.max_retries {
+            if v > 100 {
+                return Err(StatusCode::BAD_REQUEST);
+            }
             config.max_retries = v;
         }
         if let Some(ref v) = req.image_filter {
             config.image_filter = v.clone();
         }
+        if let Some(v) = req.api_token {
+            config.api_token = if v.is_empty() { None } else { Some(v) };
+        }
+        info!("update_config: 准备保存配置...");
         save_config(&config)?;
+        info!("update_config: 配置已保存");
     }
     info!("配置已更新");
     Ok(get_config(State(handle)).await)
@@ -314,8 +364,13 @@ fn save_config(config: &Config) -> Result<(), StatusCode> {
         tracing::error!("序列化配置失败: {e}");
         StatusCode::INTERNAL_SERVER_ERROR
     })?;
-    std::fs::write("config.yaml", yaml).map_err(|e| {
-        tracing::error!("写入 config.yaml 失败: {e}");
+    let tmp = "config.yaml.tmp";
+    std::fs::write(tmp, &yaml).map_err(|e| {
+        tracing::error!("写入临时配置文件失败: {e}");
+        StatusCode::INTERNAL_SERVER_ERROR
+    })?;
+    std::fs::rename(tmp, "config.yaml").map_err(|e| {
+        tracing::error!("替换配置文件失败: {e}");
         StatusCode::INTERNAL_SERVER_ERROR
     })
 }

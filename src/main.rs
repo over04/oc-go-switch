@@ -36,13 +36,12 @@ async fn main() {
         config.read().await.accounts.len()
     );
 
-    let config_guard = config.read().await;
-    let pool = match discover(&config_guard).await {
-        Ok(p) => p,
-        Err(e) => {
+    let pool = {
+        let config_guard = config.read().await;
+        discover(&config_guard).await.unwrap_or_else(|e| {
             error!("发现 key 失败: {e}");
             std::process::exit(1);
-        }
+        })
     };
 
     let total = pool.keys.len();

@@ -67,6 +67,7 @@ export interface ConfigResponse {
   go: { base_url: string };
   accounts: AccountListEntry[];
   image_filter: ImageFilterConfig;
+  api_token_set: boolean;
 }
 
 export interface ModelInfo {

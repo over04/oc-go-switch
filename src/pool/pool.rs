@@ -76,8 +76,8 @@ pub async fn discover(config: &Config) -> anyhow::Result<KeyPool> {
             account.name, account.label
         );
 
-        let oc = OpencodeClient::new(&account.name, &account.auth);
-
+        let oc = OpencodeClient::new(&account.name, &account.auth)
+            .map_err(|e| anyhow::anyhow!("{e}"))?;
         let workspaces = match oc.get_workspaces().await {
             Ok(ws) => ws,
             Err(e) => {
@@ -194,7 +194,10 @@ pub fn make_handle(
     config: Arc<RwLock<Config>>,
     log_store: Arc<LogStore>,
 ) -> KeyPoolHandle {
-    let http_client = reqwest::Client::new();
+    let http_client = reqwest::Client::builder()
+        .timeout(std::time::Duration::from_secs(30))
+        .build()
+        .expect("构建 HTTP client 失败");
     KeyPoolHandle {
         inner: Arc::new(RwLock::new(pool)),
         config,
@@ -365,7 +368,8 @@ impl KeyPoolHandle {
                 .ok_or_else(|| anyhow::anyhow!("账户 '{account_name}' 不在配置中"))?
         };
 
-        let oc = OpencodeClient::new(&account.name, &account.auth);
+        let oc = OpencodeClient::new(&account.name, &account.auth)
+            .map_err(|e| anyhow::anyhow!("{e}"))?;
         let billing = oc.get_billing(workspace_id).await?;
         let go_usage = if billing.subscribed {
             oc.get_go_usage(workspace_id).await.unwrap_or_else(|e| {
@@ -380,11 +384,6 @@ impl KeyPoolHandle {
         for k in &mut pool.keys {
             if k.workspace_id == workspace_id && k.account_name == account_name {
                 k.go_usage = go_usage.clone();
-                // 如果三个窗口都不满，清除耗尽标记
-                if !k.is_fully_exhausted() {
-                    k.depleted = false;
-                    info!("key {} 耗尽标记已清除（用量已恢复）", k.masked_key());
-                }
             }
         }
 

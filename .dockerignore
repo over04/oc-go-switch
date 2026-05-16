@@ -8,3 +8,4 @@ frontend/dist/
 cookie.json
 config.json
 .env
+.omc

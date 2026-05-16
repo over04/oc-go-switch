@@ -2,6 +2,7 @@ use regex::Regex;
 use reqwest::Client;
 use serde::de::DeserializeOwned;
 use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::OnceLock;
 use thiserror::Error;
 
 #[derive(Error, Debug)]
@@ -15,6 +16,10 @@ pub enum ServerFnError {
     #[error("Server Function 返回空响应")]
     EmptyResponse,
 }
+
+static RE_PREFIX: OnceLock<Regex> = OnceLock::new();
+static RE_REF: OnceLock<Regex> = OnceLock::new();
+static RE_KEY: OnceLock<Regex> = OnceLock::new();
 
 static INSTANCE: AtomicU64 = AtomicU64::new(0);
 
@@ -104,15 +109,14 @@ pub async fn call_no_args<T: DeserializeOwned>(
 /// 2. 将无引号的 key 转为带引号的
 /// 3. 作为 JSON 解析
 fn parse_r_response<T: DeserializeOwned>(text: &str) -> Result<T, ServerFnError> {
-    let re = Regex::new(r#"\$R\[0\]\s*=\s*"#)
-        .map_err(|e: regex::Error| ServerFnError::ParseError(e.to_string()))?;
+    let re = RE_PREFIX.get_or_init(|| {
+        Regex::new(r#"\$R\[0\]\s*=\s*"#).expect("hardcoded R-prefix regex")
+    });
 
     if let Some(cap) = re.find(text) {
         let after = &text[cap.end()..];
 
-        // 通过括号/大括号匹配提取 JSON 值
         if let Some(raw) = extract_json_value(after) {
-            // SolidJS 格式使用无引号 key: `id:"value"` 而不是 `"id":"value"`
             let fixed = solidjs_to_json(&raw);
             return serde_json::from_str(&fixed).map_err(|e| {
                 ServerFnError::ParseError(format!("JSON 解析错误: {e} | 输入: {fixed}"))
@@ -120,7 +124,6 @@ fn parse_r_response<T: DeserializeOwned>(text: &str) -> Result<T, ServerFnError>
         }
     }
 
-    // 回退：尝试将整个响应作为 JSON 解析
     if let Ok(val) = serde_json::from_str::<T>(text) {
         return Ok(val);
     }
@@ -137,10 +140,12 @@ fn parse_r_response<T: DeserializeOwned>(text: &str) -> Result<T, ServerFnError>
 /// 1. 剥离 `$R[N]=` 前缀
 /// 2. 给无引号对象 key 加上引号 `key:` → `"key":`
 fn solidjs_to_json(s: &str) -> String {
-    let re_ref = Regex::new(r#"\$R\[\d+\]="#).unwrap();
+    let re_ref = RE_REF
+        .get_or_init(|| Regex::new(r#"\$R\[\d+\]="#).expect("hardcoded R-ref regex"));
     let cleaned = re_ref.replace_all(s, "").to_string();
-
-    let re_key = Regex::new(r#"(?m)(^|[{,]\s*)([a-zA-Z_]\w*)\s*:"#).unwrap();
+    let re_key = RE_KEY.get_or_init(|| {
+        Regex::new(r#"(?m)(^|[{,]\s*)([a-zA-Z_]\w*)\s*:"#).expect("hardcoded key regex")
+    });
     re_key.replace_all(&cleaned, r#"$1"$2":"#).to_string()
 }
 

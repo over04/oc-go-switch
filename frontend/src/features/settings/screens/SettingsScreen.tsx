@@ -94,7 +94,7 @@ export function SettingsScreen() {
         initial={{ opacity: 0, y: 8 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ delay: 0.1 }}
-        className="bg-white rounded-mcm-lg border border-cream-200 shadow-mcm overflow-hidden"
+        className="bg-white rounded-mcm-lg border border-cream-200 shadow-mcm"
       >
         <div className="px-5 py-3 border-b border-cream-100">
           <h3 className="text-sm font-semibold text-espresso-700">图片过滤</h3>

@@ -81,7 +81,12 @@ export function ImageFilterForm({ models, onChange }: ImageFilterFormProps) {
       {models.map((rule, idx) => (
         <div
           key={idx}
-          className="grid grid-cols-1 sm:grid-cols-[1fr_120px_1fr_40px] gap-2 items-start p-3 bg-cream-50/50 rounded-mcm border border-cream-100"
+          className={clsx(
+            "grid grid-cols-1 gap-2 items-start p-3 bg-cream-50/50 rounded-mcm border border-cream-100",
+            rule.action === "replace"
+              ? "sm:grid-cols-[1fr_120px_1fr_40px]"
+              : "sm:grid-cols-[1fr_120px_40px]",
+          )}
         >
           <ModelPicker
             value={rule.model}
@@ -103,28 +108,25 @@ export function ImageFilterForm({ models, onChange }: ImageFilterFormProps) {
             />
           </div>
 
-          <div>
-            <label className="block text-[11px] font-medium text-espresso-400 mb-1">
-              {rule.action === "replace" ? "替换文本" : "替换文本"}
-            </label>
-            <Input
-              size="xs"
-              placeholder={
-                rule.action === "replace" ? "[Image removed]" : "—"
-              }
-              disabled={rule.action !== "replace"}
-              value={
-                rule.action === "replace"
-                  ? (rule.replacement ?? "")
-                  : ""
-              }
-              onChange={(e) =>
-                updateRule(idx, {
-                  replacement: e.target.value || null,
-                })
-              }
-            />
-          </div>
+          {rule.action === "replace" ? (
+            <div>
+              <label className="block text-[11px] font-medium text-espresso-400 mb-1">
+                替换文本
+              </label>
+              <Input
+                size="xs"
+                placeholder="[Image removed]"
+                value={rule.replacement ?? ""}
+                onChange={(e) =>
+                  updateRule(idx, {
+                    replacement: e.target.value || null,
+                  })
+                }
+              />
+            </div>
+          ) : (
+            <div />
+          )}
 
           <div className="pt-[22px]">
             <Button
