@@ -14,11 +14,18 @@ export function WorkspaceSection({ workspace }: WorkspaceSectionProps) {
         <span className="text-xs font-semibold text-espresso-700">
           {workspace.name}
         </span>
-        {workspace.subscribed ? (
-          <Badge size="xs" tone="go">Go</Badge>
-        ) : (
-          <Badge size="xs" tone="default">-</Badge>
-        )}
+        <Badge size="xs" tone={workspace.status === "unsubscribed" ? "default" : "go"}>
+          {workspace.status === "unsubscribed" ? "无订阅" : "Go"}
+        </Badge>
+        <Badge size="xs" tone={workspace.status === "available" ? "success" : workspace.status === "exhausted" ? "danger" : "default"}>
+          {workspace.status === "available"
+            ? workspace.is_current
+              ? "当前可用"
+              : `可用 #${workspace.queue_position ?? "-"}`
+            : workspace.status === "exhausted"
+              ? "当前无额度"
+              : "无 Go 订阅"}
+        </Badge>
       </div>
 
       {workspace.go_usage && (

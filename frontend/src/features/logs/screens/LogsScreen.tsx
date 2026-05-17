@@ -72,7 +72,7 @@ export function LogsScreen() {
       {/* Filters */}
       <div className="flex flex-wrap items-center gap-2 md:gap-3">
         <Input
-          placeholder="搜索模型或密钥..."
+          placeholder="搜索模型或 Key..."
           value={search}
           onChange={(e) => setSearch(e.target.value)}
           className="max-w-full sm:max-w-[240px]"
@@ -156,7 +156,7 @@ export function LogsScreen() {
                     耗时
                   </th>
                   <th className="px-4 py-2.5 text-left text-xs font-semibold text-espresso-400 uppercase tracking-wider">
-                    密钥
+                    Key
                   </th>
                   <th className="px-4 py-2.5 text-left text-xs font-semibold text-espresso-400 uppercase tracking-wider">
                     备注

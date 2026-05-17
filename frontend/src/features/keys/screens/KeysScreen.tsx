@@ -13,7 +13,7 @@ import {
   refreshPool,
 } from "@/features/settings/service/settingsService";
 import { toastSuccess, toastError } from "@/shared/lib/toast";
-import type { KeyStatus } from "@/shared/types/api";
+import type { KeyStatus, WorkspaceStatusKind } from "@/shared/types/api";
 
 export function KeysScreen() {
   const queryClient = useQueryClient();
@@ -21,13 +21,14 @@ export function KeysScreen() {
   const [refreshing, setRefreshing] = useState(false);
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState<KeyStatus | "all">("all");
+  const [workspaceFilter, setWorkspaceFilter] = useState<WorkspaceStatusKind | "all">("all");
 
   const handleSetActive = useCallback(
     async (keyId: string) => {
       try {
         await setActiveKey(keyId);
         await queryClient.invalidateQueries({ queryKey: POOL_STATUS_KEY });
-        toastSuccess("已切换活跃密钥");
+        toastSuccess("已切换当前调度 Key");
       } catch (e) {
         toastError(e instanceof Error ? e.message : "切换失败");
       }
@@ -39,7 +40,7 @@ export function KeysScreen() {
     try {
       await clearActiveKey();
       await queryClient.invalidateQueries({ queryKey: POOL_STATUS_KEY });
-      toastSuccess("已清除活跃密钥");
+      toastSuccess("已清除当前调度 Key");
     } catch (e) {
       toastError(e instanceof Error ? e.message : "操作失败");
     }
@@ -72,12 +73,7 @@ export function KeysScreen() {
       </div>
     );
 
-  const goAccounts = data.accounts
-    .map((a) => ({
-      ...a,
-      workspaces: a.workspaces.filter((w) => w.subscribed),
-    }))
-    .filter((a) => a.workspaces.length > 0);
+  const goAccounts = data.accounts.filter((a) => a.workspaces.length > 0);
 
   const totalKeys = goAccounts.reduce(
     (s, a) => s + a.workspaces.reduce((s2, w) => s2 + w.keys.length, 0),
@@ -92,10 +88,10 @@ export function KeysScreen() {
           <div className="w-1 h-6 bg-terra-500 rounded-full" />
           <div>
             <h2 className="text-lg font-semibold text-espresso-700 tracking-tight">
-              Go 订阅密钥池
+              工作区调度
             </h2>
             <p className="text-xs text-espresso-400 mt-0.5">
-              {goAccounts.length} 账户 · {totalKeys} 密钥
+              {goAccounts.length} 账户 · {totalKeys} Key
             </p>
           </div>
         </div>
@@ -105,7 +101,7 @@ export function KeysScreen() {
           onClick={handleRefresh}
           disabled={refreshing}
         >
-          {refreshing ? "刷新中..." : "刷新密钥池"}
+          {refreshing ? "刷新中..." : "刷新工作区状态"}
         </Button>
       </div>
 
@@ -121,6 +117,8 @@ export function KeysScreen() {
         onSearchChange={setSearch}
         statusFilter={statusFilter}
         onStatusFilterChange={setStatusFilter}
+        workspaceFilter={workspaceFilter}
+        onWorkspaceFilterChange={setWorkspaceFilter}
       />
 
       {/* Key cards by workspace */}
@@ -133,7 +131,7 @@ export function KeysScreen() {
           <div className="w-16 h-16 mx-auto rounded-full bg-cream-100 flex items-center justify-center mb-3">
             <span className="text-2xl text-espresso-300">◆</span>
           </div>
-          <p className="text-sm text-espresso-500">暂无 Go 订阅工作区</p>
+          <p className="text-sm text-espresso-500">暂无工作区数据</p>
         </motion.div>
       ) : (
         <KeyCardGrid
@@ -142,6 +140,7 @@ export function KeysScreen() {
           onSetActive={handleSetActive}
           search={search}
           statusFilter={statusFilter}
+          workspaceFilter={workspaceFilter}
         />
       )}
     </div>

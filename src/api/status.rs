@@ -2,25 +2,16 @@ use axum::{extract::State, response::Json};
 use serde::Serialize;
 
 use crate::opencode::types::GoUsage;
-use crate::pool::key::KeyStatus;
-use crate::pool::pool::KeyPoolHandle;
+use crate::pool::key::{KeyStatus, PoolKey};
+use crate::pool::pool::{KeyPool, KeyPoolHandle, WorkspacePool, WorkspacePoolStatus};
 
 #[derive(Debug, Serialize)]
 pub struct PoolStatusResponse {
     pub total_keys: usize,
     pub available_keys: usize,
-    pub depleted_keys: usize,
     pub current_key_id: Option<String>,
     pub last_refresh_at: Option<String>,
-    pub depleted_key_list: Vec<DepletedKeyInfo>,
     pub accounts: Vec<AccountStatus>,
-}
-
-#[derive(Debug, Serialize)]
-pub struct DepletedKeyInfo {
-    pub id: String,
-    pub masked: String,
-    pub workspace_name: String,
 }
 
 #[derive(Debug, Serialize)]
@@ -34,10 +25,20 @@ pub struct AccountStatus {
 pub struct WorkspaceStatus {
     pub id: String,
     pub name: String,
-    pub subscribed: bool,
+    pub status: WorkspaceQueueStatus,
+    pub is_current: bool,
+    pub queue_position: Option<usize>,
     pub plan: Option<String>,
     pub go_usage: Option<GoUsage>,
     pub keys: Vec<KeyStatusEntry>,
+}
+
+#[derive(Debug, Clone, Copy, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum WorkspaceQueueStatus {
+    Available,
+    Exhausted,
+    Unsubscribed,
 }
 
 #[derive(Debug, Serialize)]
@@ -49,86 +50,91 @@ pub struct KeyStatusEntry {
 
 pub async fn pool_status(State(handle): State<KeyPoolHandle>) -> Json<PoolStatusResponse> {
     let pool = handle.read().await;
-    let current_id = pool
-        .selector
-        .current_id()
-        .and_then(|id| pool.keys.iter().find(|k| &k.id == id).map(|k| k.id.clone()));
+    let current_id = pool.current_key_id.clone();
 
     let mut accounts: Vec<AccountStatus> = Vec::new();
     let mut seen_accounts: std::collections::HashMap<String, usize> =
         std::collections::HashMap::new();
 
-    for key in &pool.keys {
-        let idx = match seen_accounts.get(&key.account_name) {
+    for workspace in pool.workspaces.values() {
+        let idx = match seen_accounts.get(&workspace.account_name) {
             Some(&i) => i,
             None => {
                 let i = accounts.len();
                 accounts.push(AccountStatus {
-                    name: key.account_name.clone(),
-                    label: key.account_label.clone(),
+                    name: workspace.account_name.clone(),
+                    label: workspace.account_label.clone(),
                     workspaces: Vec::new(),
                 });
-                seen_accounts.insert(key.account_name.clone(), i);
+                seen_accounts.insert(workspace.account_name.clone(), i);
                 i
             }
         };
 
         let acct = &mut accounts[idx];
-
-        let ws_idx = acct
-            .workspaces
-            .iter()
-            .position(|w| w.id == key.workspace_id);
-        let ws_idx = match ws_idx {
-            Some(i) => i,
-            None => {
-                let i = acct.workspaces.len();
-                acct.workspaces.push(WorkspaceStatus {
-                    id: key.workspace_id.clone(),
-                    name: key.workspace_name.clone(),
-                    subscribed: key.subscribed,
-                    plan: key.plan.map(|p| format!("{:?}", p)),
-                    go_usage: key.go_usage.clone(),
-                    keys: Vec::new(),
-                });
-                i
-            }
-        };
-
-        acct.workspaces[ws_idx].keys.push(KeyStatusEntry {
-            id: key.id.clone(),
-            masked: key.masked_key(),
-            status: if Some(&key.id) == current_id.as_ref() {
-                KeyStatus::Active
-            } else {
-                key.status()
-            },
+        let queue_position = queue_position(&pool, &workspace.id);
+        acct.workspaces.push(WorkspaceStatus {
+            id: workspace.id.clone(),
+            name: workspace.name.clone(),
+            status: workspace_status(workspace),
+            is_current: pool.current_workspace_id.as_deref() == Some(workspace.id.as_str()),
+            queue_position,
+            plan: workspace.plan.map(|p| format!("{:?}", p)),
+            go_usage: workspace.go_usage.clone(),
+            keys: workspace
+                .keys
+                .iter()
+                .map(|key| key_status_entry(key, current_id.as_deref()))
+                .collect(),
         });
     }
 
-    let total = pool.keys.len();
-    let depleted = pool.keys.iter().filter(|k| k.depleted).count();
-
-    let depleted_key_list: Vec<DepletedKeyInfo> = pool
-        .keys
-        .iter()
-        .filter(|k| k.depleted)
-        .map(|k| DepletedKeyInfo {
-            id: k.id.clone(),
-            masked: k.masked_key(),
-            workspace_name: k.workspace_name.clone(),
-        })
-        .collect();
+    let total: usize = pool
+        .workspaces
+        .values()
+        .map(|workspace| workspace.keys.len())
+        .sum();
+    let available: usize = pool
+        .workspaces
+        .values()
+        .filter(|workspace| workspace.status == WorkspacePoolStatus::Available)
+        .map(|workspace| workspace.keys.len())
+        .sum();
 
     Json(PoolStatusResponse {
         total_keys: total,
-        available_keys: total - depleted,
-        depleted_keys: depleted,
+        available_keys: available,
         current_key_id: current_id,
         last_refresh_at: pool.last_refresh_at.clone(),
-        depleted_key_list,
         accounts,
     })
+}
+
+fn workspace_status(workspace: &WorkspacePool) -> WorkspaceQueueStatus {
+    match workspace.status {
+        WorkspacePoolStatus::Available => WorkspaceQueueStatus::Available,
+        WorkspacePoolStatus::Exhausted => WorkspaceQueueStatus::Exhausted,
+        WorkspacePoolStatus::Unsubscribed => WorkspaceQueueStatus::Unsubscribed,
+    }
+}
+
+fn queue_position(pool: &KeyPool, workspace_id: &str) -> Option<usize> {
+    pool.workspace_queue
+        .iter()
+        .position(|id| id == workspace_id)
+        .map(|idx| idx + 1)
+}
+
+fn key_status_entry(key: &PoolKey, current_id: Option<&str>) -> KeyStatusEntry {
+    KeyStatusEntry {
+        id: key.id.clone(),
+        masked: key.masked_key(),
+        status: if current_id == Some(key.id.as_str()) {
+            KeyStatus::Active
+        } else {
+            KeyStatus::Idle
+        },
+    }
 }
 
 pub async fn health() -> &'static str {

@@ -12,7 +12,7 @@ import { Badge } from "@/shared/ui/Badge";
 import { CopyButton } from "@/shared/ui/CopyButton";
 import { Button } from "@/shared/ui/Button";
 import { KeyTableToolbar } from "./KeyTableToolbar";
-import type { KeyStatusEntry, WorkspaceStatus, AccountStatus, KeyStatus } from "@/shared/types/api";
+import type { KeyStatusEntry, AccountStatus, KeyStatus } from "@/shared/types/api";
 
 interface FlatKeyRow {
   key: KeyStatusEntry;
@@ -20,7 +20,6 @@ interface FlatKeyRow {
   accountLabel: string;
   workspaceName: string;
   workspaceId: string;
-  subscribed: boolean;
   hourlyPercent: number | null;
   weeklyPercent: number | null;
   monthlyPercent: number | null;
@@ -38,7 +37,6 @@ function flattenKeys(accounts: AccountStatus[]): FlatKeyRow[] {
           accountLabel: acct.label,
           workspaceName: ws.name,
           workspaceId: ws.id,
-          subscribed: ws.subscribed,
           hourlyPercent: u?.hourly_percent ?? null,
           weeklyPercent: u?.weekly_percent ?? null,
           monthlyPercent: u?.monthly_percent ?? null,
@@ -51,8 +49,8 @@ function flattenKeys(accounts: AccountStatus[]): FlatKeyRow[] {
 
 const columnHelper = createColumnHelper<FlatKeyRow>();
 
-const statusLabel: Record<KeyStatus, string> = { active: "活跃", depleted: "耗尽", idle: "空闲" };
-const statusTone: Record<KeyStatus, "success" | "danger" | "default"> = { active: "success", depleted: "danger", idle: "default" };
+const statusLabel: Record<KeyStatus, string> = { active: "活跃", idle: "空闲" };
+const statusTone: Record<KeyStatus, "success" | "default"> = { active: "success", idle: "default" };
 
 interface KeyTableProps {
   accounts: AccountStatus[];
@@ -65,12 +63,11 @@ export function KeyTable({ accounts, currentKeyId, onSetActive }: KeyTableProps)
   const [sorting, setSorting] = useState<SortingState>([]);
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState<KeyStatus | "all">("all");
-  const [goFilter, setGoFilter] = useState<"all" | "go" | "nongo">("all");
 
   const columns = useMemo(
     () => [
       columnHelper.accessor("key.masked", {
-        header: "密钥",
+        header: "Key",
         cell: (info) => (
           <div className="flex items-center gap-1.5 min-w-0">
             <code className="text-2xs font-mono text-gray-500 dark:text-gray-400 truncate">
@@ -93,7 +90,7 @@ export function KeyTable({ accounts, currentKeyId, onSetActive }: KeyTableProps)
         cell: (info) => (
           <div className="flex items-center gap-1">
             <span className="text-2xs">{info.getValue()}</span>
-            {info.row.original.subscribed && <Badge size="xs" tone="go">Go</Badge>}
+            <Badge size="xs" tone="go">Go</Badge>
           </div>
         ),
         size: 100,
@@ -137,7 +134,7 @@ export function KeyTable({ accounts, currentKeyId, onSetActive }: KeyTableProps)
             </motion.span>
           ) : (
             <Button size="xs" tone="primary" onClick={() => onSetActive(keyId)}>
-              设为活跃
+              固定
             </Button>
           );
         },
@@ -167,8 +164,6 @@ export function KeyTable({ accounts, currentKeyId, onSetActive }: KeyTableProps)
 
   const filteredRows = table.getRowModel().rows.filter((row) => {
     if (statusFilter !== "all" && row.original.key.status !== statusFilter) return false;
-    if (goFilter === "go" && !row.original.subscribed) return false;
-    if (goFilter === "nongo" && row.original.subscribed) return false;
     return true;
   });
 
@@ -179,8 +174,6 @@ export function KeyTable({ accounts, currentKeyId, onSetActive }: KeyTableProps)
         onSearchChange={setSearch}
         statusFilter={statusFilter}
         onStatusFilterChange={setStatusFilter}
-        goFilter={goFilter}
-        onGoFilterChange={setGoFilter}
       />
 
       <div className="bg-white dark:bg-gray-800 rounded border border-gray-200 dark:border-gray-700 overflow-hidden">

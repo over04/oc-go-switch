@@ -62,9 +62,8 @@ impl OpencodeClient {
     /// 从工作区页面 HTML 刮取 API key。
     pub async fn list_keys(&self, workspace_id: &str) -> Result<Vec<ApiKeyEntry>, ServerFnError> {
         let html = self.fetch_workspace_page(workspace_id).await?;
-        let re = KEY_REGEX.get_or_init(|| {
-            Regex::new(r#"sk-[a-zA-Z0-9]{40,80}"#).expect("hardcoded key regex")
-        });
+        let re = KEY_REGEX
+            .get_or_init(|| Regex::new(r#"sk-[a-zA-Z0-9]{40,80}"#).expect("hardcoded key regex"));
         let keys: Vec<ApiKeyEntry> = re
             .find_iter(&html)
             .map(|m| {
@@ -102,14 +101,12 @@ impl OpencodeClient {
     }
 
     /// 从工作区 Go 页面刮取 Go 用量数据。
-    pub async fn get_go_usage(
-        &self,
-        workspace_id: &str,
-    ) -> Result<Option<GoUsage>, ServerFnError> {
+    pub async fn get_go_usage(&self, workspace_id: &str) -> Result<Option<GoUsage>, ServerFnError> {
         let html = self.fetch_go_page(workspace_id).await?;
 
         let re = USAGE_REGEX.get_or_init(|| {
-            Regex::new(r#"\bresetInSec:(\d+),usagePercent:(\d+)"#).expect("hardcoded go_usage regex")
+            Regex::new(r#"\bresetInSec:(\d+),usagePercent:(\d+)"#)
+                .expect("hardcoded go_usage regex")
         });
         let mut matches: Vec<(u64, u32)> = Vec::new();
         for caps in re.captures_iter(&html) {

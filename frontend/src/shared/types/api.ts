@@ -1,4 +1,5 @@
-export type KeyStatus = "active" | "idle" | "depleted";
+export type KeyStatus = "active" | "idle";
+export type WorkspaceStatusKind = "available" | "exhausted" | "unsubscribed";
 
 export interface GoUsage {
   hourly_percent: number;
@@ -18,7 +19,9 @@ export interface KeyStatusEntry {
 export interface WorkspaceStatus {
   id: string;
   name: string;
-  subscribed: boolean;
+  status: WorkspaceStatusKind;
+  is_current: boolean;
+  queue_position: number | null;
   plan: string | null;
   go_usage: GoUsage | null;
   keys: KeyStatusEntry[];
@@ -33,7 +36,6 @@ export interface AccountStatus {
 export interface PoolStatusResponse {
   total_keys: number;
   available_keys: number;
-  depleted_keys: number;
   current_key_id: string | null;
   accounts: AccountStatus[];
 }

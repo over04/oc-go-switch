@@ -37,16 +37,15 @@ async fn fetch_model_list(
     base_url: &str,
 ) -> Result<ModelListResponse, String> {
     let key = handle
-        .select_key(None)
+        .select_key_or_refresh()
         .await
-        .ok_or_else(|| "池中没有可用的 Go key".to_string())?;
+        .ok_or_else(|| "没有可用 Go 工作区".to_string())?;
     let url = format!("{}/models", base_url);
 
     let resp = handle
-        .http_client
+        .short_client
         .get(&url)
         .header("Authorization", format!("Bearer {}", key.key_value))
-        .timeout(std::time::Duration::from_secs(10))
         .send()
         .await
         .map_err(|e| format!("上游不可达: {e}"))?;
@@ -63,10 +62,7 @@ async fn fetch_model_list(
 
 /// GET /v1/models — OpenAI 兼容的模型列表（对外暴露）
 pub async fn list_models_v1(State(handle): State<KeyPoolHandle>) -> impl IntoResponse {
-    let cfg = handle.config();
-    let config = cfg.read().await;
-    let base_url = config.go.base_url.clone();
-    drop(config);
+    let base_url = handle.config_snapshot().await.go.base_url;
 
     match fetch_model_list(&handle, &base_url).await {
         Ok(r) => match serde_json::to_value(r) {
@@ -91,10 +87,7 @@ pub async fn list_models_v1(State(handle): State<KeyPoolHandle>) -> impl IntoRes
 
 /// GET /api/models — 仪表盘合并视图
 pub async fn list_models(State(handle): State<KeyPoolHandle>) -> Json<MergedModelsResponse> {
-    let cfg = handle.config();
-    let config = cfg.read().await;
-    let base_url = config.go.base_url.clone();
-    drop(config);
+    let base_url = handle.config_snapshot().await.go.base_url;
 
     let (openai, claude) = tokio::join!(
         fetch_model_list(&handle, &base_url),
@@ -114,13 +107,8 @@ pub async fn list_models(State(handle): State<KeyPoolHandle>) -> Json<MergedMode
 }
 
 /// GET /api/models/openai
-pub async fn list_openai_models(
-    State(handle): State<KeyPoolHandle>,
-) -> Json<ModelListResult> {
-    let cfg = handle.config();
-    let config = cfg.read().await;
-    let url = config.go.base_url.clone();
-    drop(config);
+pub async fn list_openai_models(State(handle): State<KeyPoolHandle>) -> Json<ModelListResult> {
+    let url = handle.config_snapshot().await.go.base_url;
 
     Json(match fetch_model_list(&handle, &url).await {
         Ok(r) => ModelListResult::Ok(r),
@@ -129,13 +117,8 @@ pub async fn list_openai_models(
 }
 
 /// GET /api/models/claude
-pub async fn list_claude_models(
-    State(handle): State<KeyPoolHandle>,
-) -> Json<ModelListResult> {
-    let cfg = handle.config();
-    let config = cfg.read().await;
-    let url = config.go.base_url.clone();
-    drop(config);
+pub async fn list_claude_models(State(handle): State<KeyPoolHandle>) -> Json<ModelListResult> {
+    let url = handle.config_snapshot().await.go.base_url;
 
     Json(match fetch_model_list(&handle, &url).await {
         Ok(r) => ModelListResult::Ok(r),

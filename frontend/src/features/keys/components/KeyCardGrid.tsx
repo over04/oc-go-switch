@@ -9,6 +9,7 @@ import type {
   AccountStatus,
   KeyStatusEntry,
   KeyStatus,
+  WorkspaceStatusKind,
 } from "@/shared/types/api";
 
 interface KeyCardGridProps {
@@ -17,18 +18,29 @@ interface KeyCardGridProps {
   onSetActive: (keyId: string) => void;
   search: string;
   statusFilter: KeyStatus | "all";
+  workspaceFilter: WorkspaceStatusKind | "all";
 }
 
 const statusLabel: Record<KeyStatus, string> = {
   active: "活跃",
-  depleted: "耗尽",
   idle: "空闲",
 };
 const statusDot: Record<KeyStatus, string> = {
   active: "bg-harvest-500",
-  depleted: "bg-terra-400",
   idle: "bg-espresso-300",
 };
+
+const workspaceLabel = {
+  available: "可用",
+  exhausted: "当前无额度",
+  unsubscribed: "无 Go 订阅",
+} as const;
+
+const workspaceTone = {
+  available: "success",
+  exhausted: "danger",
+  unsubscribed: "default",
+} as const;
 
 function matchesSearch(key: KeyStatusEntry, workspaceName: string, search: string): boolean {
   if (!search) return true;
@@ -45,6 +57,7 @@ export function KeyCardGrid({
   onSetActive,
   search,
   statusFilter,
+  workspaceFilter,
 }: KeyCardGridProps) {
   // 跟踪哪些工作区卡片已展开
   const [expanded, setExpanded] = useState<Set<string>>(() => {
@@ -85,6 +98,9 @@ export function KeyCardGrid({
           {/* Workspace cards */}
           <div className="space-y-3">
             {acct.workspaces.map((ws, wi) => {
+              if (workspaceFilter !== "all" && ws.status !== workspaceFilter) {
+                return null;
+              }
               const filteredKeys = ws.keys.filter(
                 (k) =>
                   matchesSearch(k, ws.name, search) &&
@@ -92,6 +108,7 @@ export function KeyCardGrid({
               );
               const isExpanded = expanded.has(ws.id);
               const hasActive = ws.keys.some((k) => k.id === currentKeyId);
+              const canSchedule = ws.status === "available";
 
               return (
                 <motion.div
@@ -122,16 +139,25 @@ export function KeyCardGrid({
                       <span className="text-sm font-medium text-espresso-700">
                         {ws.name}
                       </span>
-                      <Badge size="xs" tone="go">Go</Badge>
+                      <Badge size="xs" tone={ws.status === "unsubscribed" ? "default" : "go"}>
+                        {ws.status === "unsubscribed" ? "无订阅" : "Go"}
+                      </Badge>
+                      <Badge size="xs" tone={workspaceTone[ws.status]}>
+                        {ws.status === "available" && ws.is_current
+                          ? "当前可用"
+                          : ws.status === "available"
+                            ? `可用 #${ws.queue_position ?? "-"}`
+                            : workspaceLabel[ws.status]}
+                      </Badge>
                       {hasActive && (
                         <span className="text-xs text-terra-500 font-medium flex items-center gap-1">
                           <span className="w-1.5 h-1.5 rounded-full bg-terra-500" />
-                          活跃
+                          当前调度
                         </span>
                       )}
                     </div>
                     <div className="flex items-center gap-3 text-xs text-espresso-400">
-                      <span>{ws.keys.length} 密钥</span>
+                      <span>{ws.keys.length} Key</span>
                       {ws.go_usage && (
                         <span className="tabular-nums">
                           {ws.go_usage.hourly_percent}% 小时
@@ -167,7 +193,7 @@ export function KeyCardGrid({
                       {/* Key chips */}
                       {filteredKeys.length === 0 ? (
                         <p className="text-xs text-espresso-300 text-center py-4">
-                          无匹配密钥
+                          无匹配 Key
                         </p>
                       ) : (
                         <div className="flex flex-wrap gap-2">
@@ -199,7 +225,7 @@ export function KeyCardGrid({
                                 <span className="text-[0.625rem] text-espresso-400">
                                   {statusLabel[k.status]}
                                 </span>
-                                {!isActive && k.status !== "depleted" && (
+                                {!isActive && canSchedule && (
                                   <Button
                                     size="xs"
                                     tone="primary"
@@ -208,8 +234,13 @@ export function KeyCardGrid({
                                       onSetActive(k.id);
                                     }}
                                   >
-                                    启用
+                                    固定
                                   </Button>
+                                )}
+                                {!isActive && !canSchedule && (
+                                  <span className="text-[0.625rem] text-espresso-300">
+                                    不参与调度
+                                  </span>
                                 )}
                                 {isActive && (
                                   <span className="text-xs text-terra-500 font-semibold">

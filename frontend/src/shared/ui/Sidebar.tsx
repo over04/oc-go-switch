@@ -72,7 +72,7 @@ export function Sidebar({ open, onClose }: SidebarProps) {
           </div>
           <NavItem
             to="/keys"
-            label="密钥池"
+            label="工作区调度"
             location={location}
             index={1}
             icon="◆"

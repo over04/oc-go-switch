@@ -5,10 +5,8 @@ use axum::{
     response::Response,
 };
 use chrono::Utc;
-use std::collections::HashSet;
 use tracing::{info, warn};
 
-use crate::config::ImageFilterConfig;
 use crate::model::{Direction, LogEntry};
 use crate::pool::pool::KeyPoolHandle;
 use crate::protocol::openai::ChatCompletionRequest;
@@ -42,30 +40,30 @@ pub async fn chat_completions(
             StatusCode::BAD_REQUEST,
             msg,
             "invalid_request_error",
-            Some(if msg.contains("model") { "model" } else { "messages" }),
+            Some(if msg.contains("model") {
+                "model"
+            } else {
+                "messages"
+            }),
             Some("missing_required_parameter"),
         );
     }
 
     let model = req.model.clone();
     let is_stream = req.stream;
+    let config = handle.config_snapshot().await;
+    let image_filter_config = config.image_filter.clone();
+    let max_retries = config.max_retries;
+    let base_url = config.go.base_url;
 
+    if !image_filter_config.models.is_empty()
+        && filter::filter_openai_messages(&mut req.messages, &model, &image_filter_config)
     {
-        let cfg = handle.config();
-        let config = cfg.read().await;
-        let image_filter_config: &ImageFilterConfig = &config.image_filter;
-        if !image_filter_config.models.is_empty()
-            && filter::filter_openai_messages(&mut req.messages, &model, image_filter_config)
-        {
-            info!("图片过滤已应用于模型 '{model}'");
-        }
+        info!("图片过滤已应用于模型 '{model}'");
     }
 
-    let max_retries = handle.config().read().await.max_retries;
-    let mut depleted_ids: HashSet<String> = HashSet::new();
-
     for _attempt in 0..=max_retries {
-        let key = match handle.select_key(Some(&depleted_ids)).await {
+        let key = match handle.select_key_or_refresh().await {
             Some(k) => k,
             None => {
                 handle
@@ -77,13 +75,13 @@ pub async fn chat_completions(
                         duration_ms: start.elapsed().as_millis() as u64,
                         key_masked: "-".into(),
                         success: false,
-                        error_message: Some("所有 API key 已耗尽".into()),
+                        error_message: Some("没有可用 Go 工作区".into()),
                         stream: is_stream,
                     })
                     .await;
                 return error::openai_error(
                     StatusCode::TOO_MANY_REQUESTS,
-                    "所有 API key 已耗尽",
+                    "没有可用 Go 工作区",
                     "server_error",
                     None,
                     None,
@@ -91,14 +89,14 @@ pub async fn chat_completions(
             }
         };
 
-        let upstream_url =
-            format!("{}/chat/completions", handle.config().read().await.go.base_url);
+        let upstream_url = format!("{base_url}/chat/completions");
 
-        let mut upstream_value = serde_json::to_value(&req).map_err(|e| {
-            tracing::error!("序列化请求失败: {e}");
-        }).unwrap_or_default();
-        upstream_value["api_key"] =
-            serde_json::Value::String(key.key_value.clone());
+        let mut upstream_value = serde_json::to_value(&req)
+            .map_err(|e| {
+                tracing::error!("序列化请求失败: {e}");
+            })
+            .unwrap_or_default();
+        upstream_value["api_key"] = serde_json::Value::String(key.key_value.clone());
         let upstream_bytes = match serde_json::to_vec(&upstream_value) {
             Ok(b) => b,
             Err(e) => {
@@ -114,7 +112,7 @@ pub async fn chat_completions(
         );
 
         let resp = handle
-            .http_client
+            .proxy_client
             .post(&upstream_url)
             .header(
                 reqwest::header::AUTHORIZATION,
@@ -159,8 +157,7 @@ pub async fn chat_completions(
                         key.masked_key(),
                         status
                     );
-                    depleted_ids.insert(key.id.clone());
-                    handle.mark_current_depleted().await;
+                    handle.drop_workspace(&key.workspace_id).await;
                     continue;
                 }
 
@@ -178,15 +175,13 @@ pub async fn chat_completions(
                     })
                     .await;
                 return json_response(
-                    StatusCode::from_u16(status.as_u16())
-                        .unwrap_or(StatusCode::BAD_GATEWAY),
+                    StatusCode::from_u16(status.as_u16()).unwrap_or(StatusCode::BAD_GATEWAY),
                     &resp_body,
                 );
             }
             Err(e) => {
                 warn!("网络错误 key={}: {e}，切换 key...", key.masked_key());
-                depleted_ids.insert(key.id.clone());
-                handle.mark_current_depleted().await;
+                handle.drop_workspace(&key.workspace_id).await;
                 handle
                     .record_log(LogEntry {
                         timestamp: Utc::now().to_rfc3339(),

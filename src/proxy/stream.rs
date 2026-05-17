@@ -1,7 +1,4 @@
-use axum::{
-    http::StatusCode,
-    response::Response,
-};
+use axum::{http::StatusCode, response::Response};
 use futures_util::StreamExt;
 
 fn build_response(
@@ -39,9 +36,9 @@ pub(crate) async fn forward_json_response(upstream: reqwest::Response) -> Respon
 /// 原样转发 SSE 流。
 pub(crate) fn forward_sse_stream(upstream: reqwest::Response) -> Response {
     let status = upstream.status();
-    let stream = upstream.bytes_stream().map(|chunk| {
-        chunk.map_err(|e| std::io::Error::other(format!("{e}")))
-    });
+    let stream = upstream
+        .bytes_stream()
+        .map(|chunk| chunk.map_err(|e| std::io::Error::other(format!("{e}"))));
 
     build_response(
         status,

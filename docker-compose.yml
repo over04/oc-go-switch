@@ -8,5 +8,5 @@ services:
     ports:
       - "8180:8180"
     volumes:
-      - ./config.yaml:/config.yaml:ro
+      - ./config.yaml:/config.yaml
     restart: unless-stopped

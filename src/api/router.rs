@@ -20,10 +20,24 @@ use crate::proxy::{claude, openai};
 struct FrontendAssets;
 
 pub fn build_router(pool_handle: KeyPoolHandle) -> Router {
-    let public = Router::new()
+    let openai_api = Router::new()
         .route("/go/v1/chat/completions", post(openai::chat_completions))
-        .route("/go/v1/messages", post(claude::messages))
         .route("/go/v1/models", get(models::list_models_v1))
+        .route_layer(middleware::from_fn_with_state(
+            pool_handle.clone(),
+            openai_auth_middleware,
+        ))
+        .with_state(pool_handle.clone());
+
+    let claude_api = Router::new()
+        .route("/go/v1/messages", post(claude::messages))
+        .route_layer(middleware::from_fn_with_state(
+            pool_handle.clone(),
+            claude_auth_middleware,
+        ))
+        .with_state(pool_handle.clone());
+
+    let public = Router::new()
         .route("/health", get(status::health))
         .with_state(pool_handle.clone());
 
@@ -45,7 +59,7 @@ pub fn build_router(pool_handle: KeyPoolHandle) -> Router {
         .route("/api/pool/refresh", post(accounts::force_refresh))
         .route_layer(middleware::from_fn_with_state(
             pool_handle.clone(),
-            auth_middleware,
+            admin_auth_middleware,
         ))
         .with_state(pool_handle.clone());
 
@@ -55,38 +69,90 @@ pub fn build_router(pool_handle: KeyPoolHandle) -> Router {
 
     Router::new()
         .merge(public)
+        .merge(openai_api)
+        .merge(claude_api)
         .merge(admin)
         .merge(frontend)
         .layer(CorsLayer::permissive())
 }
 
-async fn auth_middleware(
+async fn admin_auth_middleware(
     State(handle): State<KeyPoolHandle>,
     request: axum::http::Request<axum::body::Body>,
     next: middleware::Next,
 ) -> Result<Response, StatusCode> {
-    let token = {
-        let cfg = handle.config();
-        let config = cfg.read().await;
-        config.api_token.clone()
-    };
+    let expected = handle.config_snapshot().await.api_token;
+    authorize_admin(&request, &expected)?;
+    Ok(next.run(request).await)
+}
 
-    match token {
-        None => Err(StatusCode::NOT_FOUND),
-        Some(expected) => {
-            let provided = request
-                .headers()
-                .get(header::AUTHORIZATION)
-                .and_then(|v| v.to_str().ok())
-                .and_then(|v| v.strip_prefix("Bearer "))
-                .unwrap_or("");
-            if provided == expected {
-                Ok(next.run(request).await)
-            } else {
-                Err(StatusCode::UNAUTHORIZED)
-            }
-        }
+async fn openai_auth_middleware(
+    State(handle): State<KeyPoolHandle>,
+    request: axum::http::Request<axum::body::Body>,
+    next: middleware::Next,
+) -> Result<Response, StatusCode> {
+    let expected = handle.config_snapshot().await.api_token;
+    authorize_openai(&request, &expected)?;
+    Ok(next.run(request).await)
+}
+
+async fn claude_auth_middleware(
+    State(handle): State<KeyPoolHandle>,
+    request: axum::http::Request<axum::body::Body>,
+    next: middleware::Next,
+) -> Result<Response, StatusCode> {
+    let expected = handle.config_snapshot().await.api_token;
+    authorize_claude(&request, &expected)?;
+    Ok(next.run(request).await)
+}
+
+fn authorize_admin(
+    request: &axum::http::Request<axum::body::Body>,
+    expected: &str,
+) -> Result<(), StatusCode> {
+    authorize_bearer(request, expected)
+}
+
+fn authorize_openai(
+    request: &axum::http::Request<axum::body::Body>,
+    expected: &str,
+) -> Result<(), StatusCode> {
+    authorize_bearer(request, expected)
+}
+
+fn authorize_claude(
+    request: &axum::http::Request<axum::body::Body>,
+    expected: &str,
+) -> Result<(), StatusCode> {
+    if x_api_key(request) == Some(expected) || bearer_token(request) == Some(expected) {
+        return Ok(());
     }
+    Err(StatusCode::UNAUTHORIZED)
+}
+
+fn authorize_bearer(
+    request: &axum::http::Request<axum::body::Body>,
+    expected: &str,
+) -> Result<(), StatusCode> {
+    if bearer_token(request) == Some(expected) {
+        return Ok(());
+    }
+    Err(StatusCode::UNAUTHORIZED)
+}
+
+fn bearer_token(request: &axum::http::Request<axum::body::Body>) -> Option<&str> {
+    request
+        .headers()
+        .get(header::AUTHORIZATION)
+        .and_then(|v| v.to_str().ok())
+        .and_then(|v| v.strip_prefix("Bearer "))
+}
+
+fn x_api_key(request: &axum::http::Request<axum::body::Body>) -> Option<&str> {
+    request
+        .headers()
+        .get("x-api-key")
+        .and_then(|v| v.to_str().ok())
 }
 
 fn mime_from_path(path: &str) -> &'static str {
@@ -108,14 +174,21 @@ async fn serve_frontend(uri: axum::http::Uri) -> Response {
     let path = uri.path();
     let asset_path = path.trim_start_matches('/');
 
-    if asset_path.starts_with("api/") || asset_path.starts_with("pool/") || asset_path.starts_with("go/") {
+    if asset_path.starts_with("api/")
+        || asset_path.starts_with("pool/")
+        || asset_path.starts_with("go/")
+    {
         return Response::builder()
             .status(StatusCode::NOT_FOUND)
             .body(Body::from("未找到"))
             .unwrap();
     }
 
-    let asset_path = if asset_path.is_empty() { "index.html" } else { asset_path };
+    let asset_path = if asset_path.is_empty() {
+        "index.html"
+    } else {
+        asset_path
+    };
 
     match FrontendAssets::get(asset_path) {
         Some(file) => Response::builder()

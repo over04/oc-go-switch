@@ -152,7 +152,8 @@ mod tests {
 
     #[test]
     fn unknown_role_falls_back() {
-        let json = r#"{"model": "gpt-4", "messages": [{"role": "future_role", "content": "test"}]}"#;
+        let json =
+            r#"{"model": "gpt-4", "messages": [{"role": "future_role", "content": "test"}]}"#;
         let req: ChatCompletionRequest = serde_json::from_str(json).unwrap();
         assert_eq!(req.messages[0].role, ChatRole::Unknown);
     }
@@ -164,12 +165,16 @@ mod tests {
             "messages": [{"role": "user", "content": [{"type": "text", "text": "hello"}, {"type": "image_url", "image_url": {"url": "https://example.com/img.png"}}]}]
         }"#;
         let req: ChatCompletionRequest = serde_json::from_str(json).unwrap();
-        assert!(matches!(req.messages[0].content, Some(ChatContent::Parts(_))));
+        assert!(matches!(
+            req.messages[0].content,
+            Some(ChatContent::Parts(_))
+        ));
     }
 
     #[test]
     fn content_text_string() {
-        let json = r#"{"model": "gpt-4", "messages": [{"role": "user", "content": "simple text"}]}"#;
+        let json =
+            r#"{"model": "gpt-4", "messages": [{"role": "user", "content": "simple text"}]}"#;
         let req: ChatCompletionRequest = serde_json::from_str(json).unwrap();
         assert_eq!(
             req.messages[0].content,

@@ -173,7 +173,7 @@ export function AccountsScreen() {
                   </div>
                   <div className="flex items-center gap-3">
                     <span className="text-xs text-espresso-400">
-                      {workspaces.length} 工作区 · {keyCount} 密钥
+                      {workspaces.length} 工作区 · {keyCount} Key
                     </span>
                     {!editing && (
                       <Button
@@ -200,7 +200,7 @@ export function AccountsScreen() {
                 <div className="px-5 py-3">
                   {workspaces.length === 0 ? (
                     <p className="text-xs text-espresso-400 py-3 text-center">
-                      暂无工作区数据，等待密钥池刷新
+                      暂无工作区数据，等待工作区状态刷新
                     </p>
                   ) : (
                     <div className="space-y-3">
@@ -227,7 +227,7 @@ export function AccountsScreen() {
           </div>
           <p className="text-sm text-espresso-500 mb-1">暂无账户</p>
           <p className="text-xs text-espresso-400 mb-4">
-            添加账户以开始管理密钥池
+            添加账户以开始管理工作区调度
           </p>
           <Button size="sm" tone="primary" onClick={() => setShowAdd(true)}>
             添加第一个账户

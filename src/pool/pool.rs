@@ -1,59 +1,79 @@
-use std::collections::{HashMap, HashSet};
+use std::collections::{HashMap, VecDeque};
 use std::sync::Arc;
 
 use chrono::Utc;
-use tokio::sync::RwLock;
+use tokio::sync::{Mutex, RwLock};
 use tracing::{error, info, warn};
 
 use crate::api::logs::LogStore;
-use crate::config::Config;
+use crate::config::{store::ConfigStore, Config};
 use crate::model::LogEntry;
 use crate::opencode::client::OpencodeClient;
-use crate::opencode::types::SubscriptionPlan;
+use crate::opencode::types::{GoUsage, SubscriptionPlan};
 
 use super::key::PoolKey;
-use super::selector::StickyKeySelector;
 
-/// 从 Go 订阅池中选出最佳 key。
-/// 规则：
-/// 1. 只选已订阅 Go、未耗尽、未完全满额的 key
-/// 2. 每个工作区最多选一个（用量最低的）
-/// 3. 按用量百分比升序排列
-fn pick_best_key_id(keys: &[PoolKey], depleted_ids: Option<&HashSet<String>>) -> Option<String> {
-    let excluded = |id: &str| depleted_ids.is_some_and(|s| s.contains(id));
-    let mut best_per_ws: HashMap<&str, &PoolKey> = HashMap::new();
-    for k in keys.iter().filter(|k| {
-        !k.depleted && k.subscribed && !k.is_fully_exhausted() && !excluded(&k.id)
-    }) {
-        let entry = best_per_ws.entry(&k.workspace_id).or_insert(k);
-        if k.max_usage_pct() < entry.max_usage_pct() {
-            *entry = k;
-        }
+#[derive(Debug, Clone)]
+pub struct WorkspacePool {
+    pub id: String,
+    pub name: String,
+    pub account_name: String,
+    pub account_label: String,
+    pub status: WorkspacePoolStatus,
+    pub plan: Option<SubscriptionPlan>,
+    pub go_usage: Option<GoUsage>,
+    pub keys: VecDeque<PoolKey>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum WorkspacePoolStatus {
+    Available,
+    Exhausted,
+    Unsubscribed,
+}
+
+impl WorkspacePool {
+    fn usage_rank(&self) -> u32 {
+        self.go_usage.as_ref().map_or(u32::MAX, |u| {
+            u.hourly_percent
+                .max(u.weekly_percent)
+                .max(u.monthly_percent)
+        })
     }
-
-    let mut candidates: Vec<&&PoolKey> = best_per_ws.values().collect();
-    if candidates.is_empty() {
-        return None;
-    }
-
-    candidates.sort_by_key(|a| a.max_usage_pct());
-
-    Some(candidates[0].id.clone())
 }
 
 #[derive(Debug)]
 pub struct KeyPool {
-    pub keys: Vec<PoolKey>,
-    pub selector: StickyKeySelector,
+    pub workspaces: HashMap<String, WorkspacePool>,
+    pub workspace_queue: VecDeque<String>,
+    pub current_workspace_id: Option<String>,
+    pub current_key_id: Option<String>,
     pub last_refresh_at: Option<String>,
+}
+
+#[derive(Debug, Clone)]
+pub struct SelectedKey {
+    pub id: String,
+    pub key_value: String,
+    pub workspace_id: String,
+    pub workspace_name: String,
+}
+
+impl SelectedKey {
+    pub fn masked_key(&self) -> String {
+        PoolKey::mask_value(&self.key_value)
+    }
 }
 
 #[derive(Debug, Clone)]
 pub struct KeyPoolHandle {
     pub(crate) inner: Arc<RwLock<KeyPool>>,
     pub(crate) config: Arc<RwLock<Config>>,
+    pub(crate) config_store: ConfigStore,
     pub log_store: Arc<LogStore>,
-    pub http_client: reqwest::Client,
+    pub proxy_client: reqwest::Client,
+    pub short_client: reqwest::Client,
+    refresh_gate: Arc<Mutex<()>>,
 }
 
 impl KeyPoolHandle {
@@ -61,14 +81,41 @@ impl KeyPoolHandle {
         self.inner.read().await
     }
 
-    pub fn config(&self) -> Arc<RwLock<Config>> {
-        self.config.clone()
+    pub async fn config_snapshot(&self) -> Config {
+        self.config.read().await.clone()
+    }
+
+    pub async fn save_config_snapshot(&self, next: Config) -> Result<(), anyhow::Error> {
+        next.validate()?;
+        self.config_store.save(&next).await?;
+        let mut config = self.config.write().await;
+        *config = next;
+        Ok(())
+    }
+
+    pub async fn set_active_key(&self, key_id: String) -> bool {
+        let mut pool = self.inner.write().await;
+        let Some((workspace_id, key)) = take_key_from_any_workspace(&mut pool, &key_id) else {
+            return false;
+        };
+        pool.current_workspace_id = Some(workspace_id.clone());
+        pool.current_key_id = Some(key.id.clone());
+        if let Some(workspace) = pool.workspaces.get_mut(&workspace_id) {
+            workspace.keys.push_front(key);
+        }
+        move_workspace_front(&mut pool.workspace_queue, &workspace_id);
+        true
+    }
+
+    pub async fn clear_active_key(&self) {
+        let mut pool = self.inner.write().await;
+        pool.current_workspace_id = None;
+        pool.current_key_id = None;
     }
 }
 
-/// 遍历所有配置的账户，发现工作区和 API key，构建 KeyPool。
 pub async fn discover(config: &Config) -> anyhow::Result<KeyPool> {
-    let mut all_keys: Vec<PoolKey> = Vec::new();
+    let mut workspaces: HashMap<String, WorkspacePool> = HashMap::new();
 
     for account in &config.accounts {
         info!(
@@ -78,7 +125,7 @@ pub async fn discover(config: &Config) -> anyhow::Result<KeyPool> {
 
         let oc = OpencodeClient::new(&account.name, &account.auth)
             .map_err(|e| anyhow::anyhow!("{e}"))?;
-        let workspaces = match oc.get_workspaces().await {
+        let remote_workspaces = match oc.get_workspaces().await {
             Ok(ws) => ws,
             Err(e) => {
                 error!("获取账户 '{}' 的工作区列表失败: {e}", account.name);
@@ -86,15 +133,17 @@ pub async fn discover(config: &Config) -> anyhow::Result<KeyPool> {
             }
         };
 
-        info!(
-            "账户 '{}': 发现 {} 个工作区",
-            account.name,
-            workspaces.len()
-        );
+        for ws in &remote_workspaces {
+            let billing = match oc.get_billing(&ws.id).await {
+                Ok(b) => b,
+                Err(e) => {
+                    warn!("获取工作区 '{}' 的账单信息失败: {e}", ws.name);
+                    continue;
+                }
+            };
 
-        for ws in &workspaces {
-            let keys = match oc.list_keys(&ws.id).await {
-                Ok(k) => k,
+            let key_entries = match oc.list_keys(&ws.id).await {
+                Ok(keys) => keys,
                 Err(e) => {
                     warn!(
                         "获取工作区 '{}' ({}/{}) 的 key 列表失败: {e}",
@@ -104,87 +153,87 @@ pub async fn discover(config: &Config) -> anyhow::Result<KeyPool> {
                 }
             };
 
-            let billing = match oc.get_billing(&ws.id).await {
-                Ok(b) => Some(b),
-                Err(e) => {
-                    warn!("获取工作区 '{}' 的账单信息失败: {e}", ws.name);
-                    None
-                }
-            };
-            let go_usage = match &billing {
-                Some(b) if b.subscribed => match oc.get_go_usage(&ws.id).await {
-                    Ok(u) => u,
+            let is_go = billing.subscribed && billing.plan == Some(SubscriptionPlan::Go);
+            let go_usage = if is_go {
+                match oc.get_go_usage(&ws.id).await {
+                    Ok(usage) => usage,
                     Err(e) => {
                         warn!("获取工作区 '{}' 的 Go 用量失败: {e}", ws.name);
                         None
                     }
-                },
-                _ => None,
+                }
+            } else {
+                None
             };
 
-            let subscribed = billing
-                .as_ref()
-                .map(|b| b.subscribed && b.plan == Some(SubscriptionPlan::Go))
-                .unwrap_or(false);
-
-            // 跳过 Zen 订阅的工作区
-            if let Some(ref b) = billing {
-                if b.plan == Some(SubscriptionPlan::Zen) {
-                    info!(
-                        "跳过 Zen 工作区 '{}' (账户 '{}')",
-                        ws.name, account.name
-                    );
-                    continue;
-                }
+            let mut key_queue = VecDeque::new();
+            for key_entry in key_entries {
+                key_queue.push_back(PoolKey {
+                    id: format!("{}/{}/{}", account.name, ws.id, key_entry.id),
+                    key_value: key_entry.key,
+                    key_name: key_entry.name,
+                });
             }
 
-            // 只有 Go 订阅的工作区才进入池
-            if !subscribed {
-                info!(
-                    "跳过非 Go 工作区 '{}' (账户 '{}')",
-                    ws.name, account.name
-                );
+            if key_queue.is_empty() {
                 continue;
             }
 
-            for key_entry in &keys {
-                let pool_key = PoolKey {
-                    id: format!("{}/{}/{}", account.name, ws.id, key_entry.id),
+            let workspace_id = format!("{}/{}", account.name, ws.id);
+            let status = if !is_go {
+                WorkspacePoolStatus::Unsubscribed
+            } else if is_exhausted_usage(go_usage.as_ref()) {
+                WorkspacePoolStatus::Exhausted
+            } else {
+                WorkspacePoolStatus::Available
+            };
+            workspaces.insert(
+                workspace_id.clone(),
+                WorkspacePool {
+                    id: workspace_id,
+                    name: ws.name.clone(),
                     account_name: account.name.clone(),
                     account_label: account.label.clone(),
-                    workspace_id: ws.id.clone(),
-                    workspace_name: ws.name.clone(),
-                    key_value: key_entry.key.clone(),
-                    key_name: key_entry.name.clone(),
-                    plan: billing.as_ref().and_then(|b| b.plan),
-                    subscribed,
-                    depleted: false,
-                    go_usage: go_usage.clone(),
-                };
-
-                info!(
-                    "发现 key: {} | workspace={} subscribed=true go_usage={}",
-                    pool_key.masked_key(),
-                    pool_key.workspace_name,
-                    go_usage.is_some(),
-                );
-
-                all_keys.push(pool_key);
-            }
+                    status,
+                    plan: billing.plan,
+                    go_usage,
+                    keys: key_queue,
+                },
+            );
         }
     }
 
-    if all_keys.is_empty() {
+    if !workspaces
+        .values()
+        .any(|workspace| workspace.status == WorkspacePoolStatus::Available)
+    {
         return Err(anyhow::anyhow!(
-            "未发现 Go 订阅的 API key，请检查配置和账户授权。"
+            "未发现可用的 Go 工作区，请检查配置和账户授权。"
         ));
     }
 
-    info!("KeyPool: 共发现 {} 个 Go 订阅 key", all_keys.len());
+    let mut workspace_queue: VecDeque<String> = workspaces
+        .iter()
+        .filter(|(_, workspace)| workspace.status == WorkspacePoolStatus::Available)
+        .map(|(id, _)| id.clone())
+        .collect();
+    workspace_queue.make_contiguous().sort_by_key(|id| {
+        workspaces
+            .get(id)
+            .map_or(u32::MAX, WorkspacePool::usage_rank)
+    });
+
+    info!(
+        "KeyPool: 共发现 {} 个工作区，{} 个可调度 Go 工作区",
+        workspaces.len(),
+        workspace_queue.len()
+    );
 
     Ok(KeyPool {
-        keys: all_keys,
-        selector: StickyKeySelector::new(),
+        workspaces,
+        workspace_queue,
+        current_workspace_id: None,
+        current_key_id: None,
         last_refresh_at: None,
     })
 }
@@ -192,202 +241,133 @@ pub async fn discover(config: &Config) -> anyhow::Result<KeyPool> {
 pub fn make_handle(
     pool: KeyPool,
     config: Arc<RwLock<Config>>,
+    config_store: ConfigStore,
     log_store: Arc<LogStore>,
 ) -> KeyPoolHandle {
-    let http_client = reqwest::Client::builder()
-        .timeout(std::time::Duration::from_secs(30))
+    let proxy_client = reqwest::Client::builder()
+        .connect_timeout(std::time::Duration::from_secs(10))
         .build()
-        .expect("构建 HTTP client 失败");
+        .expect("构建代理 HTTP client 失败");
+    let short_client = reqwest::Client::builder()
+        .connect_timeout(std::time::Duration::from_secs(10))
+        .timeout(std::time::Duration::from_secs(60))
+        .build()
+        .expect("构建短请求 HTTP client 失败");
+
     KeyPoolHandle {
         inner: Arc::new(RwLock::new(pool)),
         config,
+        config_store,
         log_store,
-        http_client,
+        proxy_client,
+        short_client,
+        refresh_gate: Arc::new(Mutex::new(())),
     }
 }
 
 impl KeyPoolHandle {
-    /// 选一个 key。`depleted_ids` 用于在本轮请求中排除已耗尽的 key，传 `None` 表示不排除。
-    pub async fn select_key(
-        &self,
-        depleted_ids: Option<&HashSet<String>>,
-    ) -> Option<PoolKey> {
-        let excluded = |id: &str| depleted_ids.is_some_and(|s| s.contains(id));
-
-        {
-            let pool = self.inner.read().await;
-            let current_id = pool.selector.current_id().cloned();
-            if let Some(ref id) = current_id {
-                if let Some(key) = pool.keys.iter().find(|k| {
-                    &k.id == id && !k.depleted && k.subscribed && !k.is_fully_exhausted() && !excluded(&k.id)
-                }) {
-                    return Some(key.clone());
-                }
-            }
-        }
-
-        if let Some(key) = self.pick_and_set_key(depleted_ids).await {
-            return Some(key);
-        }
-
-        if self.trigger_refresh(depleted_ids).await {
-            return self.pick_and_set_key(depleted_ids).await;
-        }
-
-        None
-    }
-
-    async fn pick_and_set_key(
-        &self,
-        depleted_ids: Option<&HashSet<String>>,
-    ) -> Option<PoolKey> {
-        let picked_id: Option<String> = {
-            let pool = self.inner.read().await;
-            pick_best_key_id(&pool.keys, depleted_ids)
-        };
-
-        if let Some(ref id) = picked_id {
+    pub async fn select_key_or_refresh(&self) -> Option<SelectedKey> {
+        let selected = {
             let mut pool = self.inner.write().await;
-            pool.selector.set_current(id.clone());
-            return pool.keys.iter().find(|k| &k.id == id).cloned();
-        }
-
-        None
-    }
-
-    /// 立即刷新整个池（全量 discover）。`depleted_ids` 中的 key 在刷新后立即标记为耗尽，
-    /// 防止它们在本轮请求中被重新选中。
-    pub async fn trigger_refresh(
-        &self,
-        depleted_ids: Option<&HashSet<String>>,
-    ) -> bool {
-        let old_sticky_id = {
-            let pool = self.inner.read().await;
-            pool.selector.current_id().cloned()
+            select_from_pool(&mut pool)
         };
 
-        let config_guard = self.config.read().await;
-        match discover(&config_guard).await {
-            Ok(mut new_pool) => {
-                drop(config_guard);
-                if let Some(ids) = depleted_ids {
-                    for k in &mut new_pool.keys {
-                        if ids.contains(&k.id) {
-                            k.depleted = true;
-                        }
-                    }
-                }
-                new_pool.selector = super::selector::StickyKeySelector::new();
-                if let Some(ref old_id) = old_sticky_id {
-                    let still_viable = new_pool.keys.iter().any(|k| {
-                        &k.id == old_id && !k.depleted && k.subscribed && !k.is_fully_exhausted()
-                    });
-                    if still_viable {
-                        new_pool.selector.set_current(old_id.clone());
-                        info!("刷新后保留 sticky key: {}", old_id);
-                    } else if let Some(id) = pick_best_key_id(&new_pool.keys, depleted_ids) {
-                        new_pool.selector.set_current(id);
-                    }
-                } else if let Some(id) = pick_best_key_id(&new_pool.keys, depleted_ids) {
-                    new_pool.selector.set_current(id);
-                }
-                let now = Utc::now().to_rfc3339();
-                new_pool.last_refresh_at = Some(now);
-                let count = new_pool.keys.len();
-                let mut pool = self.inner.write().await;
-                *pool = new_pool;
-                info!("池已刷新，{} 个 key 可用", count);
-                true
-            }
-            Err(e) => {
-                error!("池刷新失败: {e}");
-                false
-            }
+        if selected.is_none() {
+            self.request_refresh();
         }
+        selected
     }
 
-    /// 记录一条代理请求日志。
+    pub fn request_refresh(&self) {
+        let handle = self.clone();
+        tokio::spawn(async move {
+            if let Err(e) = handle.refresh_now().await {
+                error!("后台刷新失败: {e}");
+            }
+        });
+    }
+
+    pub async fn refresh_now(&self) -> Result<bool, anyhow::Error> {
+        let _refresh_guard = match self.refresh_gate.try_lock() {
+            Ok(guard) => guard,
+            Err(_) => return Ok(false),
+        };
+
+        let config = self.config_snapshot().await;
+        let mut new_pool = discover(&config).await?;
+        new_pool.last_refresh_at = Some(Utc::now().to_rfc3339());
+        let count = new_pool.workspace_queue.len();
+
+        let mut pool = self.inner.write().await;
+        *pool = new_pool;
+        info!("池已刷新，{} 个 Go 工作区可用", count);
+        Ok(true)
+    }
+
     pub async fn record_log(&self, entry: LogEntry) {
         self.log_store.record(entry).await;
     }
 
-    /// 将当前 sticky key 标记为耗尽，并异步刷新该工作区的用量数据。
-    pub async fn mark_current_depleted(&self) {
-        let depleted_info = {
+    pub async fn drop_workspace(&self, workspace_id: &str) {
+        let empty = {
             let mut pool = self.inner.write().await;
-            let current_id = pool.selector.current_id().cloned();
-            let mut target: Option<(String, String, String)> = None;
-            if let Some(ref id) = current_id {
-                for k in &mut pool.keys {
-                    if k.id == *id {
-                        k.depleted = true;
-                        target = Some((
-                            k.account_name.clone(),
-                            k.workspace_id.clone(),
-                            k.key_value.clone(),
-                        ));
-                    }
-                }
+            pool.workspaces.remove(workspace_id);
+            pool.workspace_queue.retain(|id| id != workspace_id);
+            if pool.current_workspace_id.as_deref() == Some(workspace_id) {
+                pool.current_workspace_id = None;
+                pool.current_key_id = None;
             }
-            pool.selector.reset();
-            target
+            pool.workspace_queue.is_empty()
         };
-
-        if let Some((account_name, ws_id, key_value)) = depleted_info {
-            let handle = self.clone();
-            tokio::spawn(async move {
-                if let Err(e) = handle
-                    .refresh_workspace_usage(&account_name, &ws_id)
-                    .await
-                {
-                    warn!(
-                        "后台用量刷新失败 workspace={}/{}: {e}",
-                        account_name, ws_id
-                    );
-                } else {
-                    info!("已刷新耗尽 key {} 的用量数据", PoolKey::mask_value(&key_value));
-                }
-            });
+        info!("workspace 已出队: {workspace_id}");
+        if empty {
+            self.request_refresh();
         }
     }
+}
 
-    /// 刷新单个工作区的 Go 用量（轻量操作，不走全量 discover）。
-    /// 更新池中该工作区下所有 key 的 go_usage。
-    async fn refresh_workspace_usage(
-        &self,
-        account_name: &str,
-        workspace_id: &str,
-    ) -> Result<(), anyhow::Error> {
-        let account = {
-            let config = self.config.read().await;
-            config
-                .accounts
-                .iter()
-                .find(|a| a.name == account_name)
-                .cloned()
-                .ok_or_else(|| anyhow::anyhow!("账户 '{account_name}' 不在配置中"))?
-        };
+fn select_from_pool(pool: &mut KeyPool) -> Option<SelectedKey> {
+    let workspace_id = pool.workspace_queue.pop_front()?;
+    let key = {
+        let workspace = pool.workspaces.get_mut(&workspace_id)?;
+        workspace.keys.pop_front()?
+    };
 
-        let oc = OpencodeClient::new(&account.name, &account.auth)
-            .map_err(|e| anyhow::anyhow!("{e}"))?;
-        let billing = oc.get_billing(workspace_id).await?;
-        let go_usage = if billing.subscribed {
-            oc.get_go_usage(workspace_id).await.unwrap_or_else(|e| {
-                warn!("获取工作区 '{workspace_id}' 的 Go 用量失败: {e}");
-                None
-            })
-        } else {
-            None
-        };
-
-        let mut pool = self.inner.write().await;
-        for k in &mut pool.keys {
-            if k.workspace_id == workspace_id && k.account_name == account_name {
-                k.go_usage = go_usage.clone();
-            }
+    let selected = {
+        let workspace = pool.workspaces.get(&workspace_id)?;
+        SelectedKey {
+            id: key.id.clone(),
+            key_value: key.key_value.clone(),
+            workspace_id: workspace.id.clone(),
+            workspace_name: workspace.name.clone(),
         }
+    };
 
-        info!("工作区 {workspace_id} 的 Go 用量已刷新");
-        Ok(())
+    let workspace = pool.workspaces.get_mut(&workspace_id)?;
+    workspace.keys.push_back(key);
+    pool.workspace_queue.push_back(workspace_id.clone());
+    pool.current_workspace_id = Some(workspace_id);
+    pool.current_key_id = Some(selected.id.clone());
+    Some(selected)
+}
+
+fn take_key_from_any_workspace(pool: &mut KeyPool, key_id: &str) -> Option<(String, PoolKey)> {
+    for (workspace_id, workspace) in &mut pool.workspaces {
+        if let Some(index) = workspace.keys.iter().position(|key| key.id == key_id) {
+            let key = workspace.keys.remove(index)?;
+            return Some((workspace_id.clone(), key));
+        }
     }
+    None
+}
+
+fn move_workspace_front(queue: &mut VecDeque<String>, workspace_id: &str) {
+    queue.retain(|id| id != workspace_id);
+    queue.push_front(workspace_id.to_string());
+}
+
+fn is_exhausted_usage(go_usage: Option<&GoUsage>) -> bool {
+    go_usage.is_some_and(|u| {
+        u.hourly_percent >= 100 || u.weekly_percent >= 100 || u.monthly_percent >= 100
+    })
 }

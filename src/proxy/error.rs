@@ -27,14 +27,18 @@ pub(crate) fn openai_error(
         error: OpenAIError,
     }
 
-    (status, Json(Body {
-        error: OpenAIError {
-            message: message.into(),
-            error_type: error_type.into(),
-            param: param.map(String::from),
-            code: code.map(String::from),
-        },
-    })).into_response()
+    (
+        status,
+        Json(Body {
+            error: OpenAIError {
+                message: message.into(),
+                error_type: error_type.into(),
+                param: param.map(String::from),
+                code: code.map(String::from),
+            },
+        }),
+    )
+        .into_response()
 }
 
 /// Anthropic 协议错误响应格式: `{"type": "error", "error": {"type": "...", "message": "..."}}`
@@ -57,11 +61,15 @@ pub(crate) fn anthropic_error(
         error: AnthropicErrorDetail,
     }
 
-    (status, Json(Body {
-        body_type: "error",
-        error: AnthropicErrorDetail {
-            error_type: error_type.into(),
-            message: message.into(),
-        },
-    })).into_response()
+    (
+        status,
+        Json(Body {
+            body_type: "error",
+            error: AnthropicErrorDetail {
+                error_type: error_type.into(),
+                message: message.into(),
+            },
+        }),
+    )
+        .into_response()
 }

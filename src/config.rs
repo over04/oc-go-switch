@@ -1,5 +1,6 @@
+pub mod store;
+
 use serde::{Deserialize, Serialize};
-use std::path::Path;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Config {
@@ -13,9 +14,8 @@ pub struct Config {
     pub go: GoConfig,
     #[serde(default)]
     pub image_filter: ImageFilterConfig,
-    /// API token for management endpoints. If unset, management API is disabled.
-    #[serde(default)]
-    pub api_token: Option<String>,
+    /// 管理 API 与协议入口共用 token。
+    pub api_token: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -75,20 +75,67 @@ fn default_max_retries() -> usize {
 }
 
 impl Config {
-    pub fn load(path: impl AsRef<Path>) -> Result<Self, anyhow::Error> {
-        let content = std::fs::read_to_string(path)?;
-        let config: Config = serde_yaml::from_str(&content)?;
-        if config.max_retries > 100 {
+    pub fn from_yaml(content: &str) -> Result<Self, anyhow::Error> {
+        let config: Config = serde_yaml::from_str(content)?;
+        config.validate()?;
+        Ok(config)
+    }
+
+    pub fn validate(&self) -> Result<(), anyhow::Error> {
+        if self.max_retries > 100 {
             return Err(anyhow::anyhow!(
                 "max_retries 不能超过 100，当前值为 {}",
-                config.max_retries
+                self.max_retries
             ));
         }
-        if config.api_token.is_none() {
-            return Err(anyhow::anyhow!(
-                "config.yaml 缺少 api_token，管理 API 将不可用。请在 config.yaml 中设置 api_token"
-            ));
-        }
-        Ok(config)
+        validate_token("api_token", &self.api_token)?;
+        Ok(())
+    }
+}
+
+fn validate_token(name: &str, value: &str) -> Result<(), anyhow::Error> {
+    if value.trim().is_empty() {
+        return Err(anyhow::anyhow!("config.yaml 缺少有效的 {name}"));
+    }
+    Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn valid_yaml() -> String {
+        r#"
+listen: 127.0.0.1:8180
+accounts: []
+refresh_interval_secs: 300
+max_retries: 8
+go:
+  base_url: https://opencode.ai/zen/go/v1
+image_filter:
+  models: []
+api_token: admin-token
+"#
+        .to_string()
+    }
+
+    #[test]
+    fn load_requires_api_token() {
+        let cfg = Config::from_yaml(&valid_yaml()).unwrap();
+        assert_eq!(cfg.api_token, "admin-token");
+    }
+
+    #[test]
+    fn blank_token_is_invalid() {
+        let yaml = valid_yaml().replace("admin-token", " ");
+        let err = Config::from_yaml(&yaml).unwrap_err().to_string();
+        assert!(err.contains("api_token"));
+    }
+
+    #[test]
+    fn max_retries_limit_is_enforced() {
+        let yaml = valid_yaml().replace("max_retries: 8", "max_retries: 101");
+        let err = Config::from_yaml(&yaml).unwrap_err().to_string();
+        assert!(err.contains("max_retries"));
     }
 }

@@ -39,8 +39,7 @@ pub async fn call<T: DeserializeOwned>(
     args: &impl serde::Serialize,
 ) -> Result<T, ServerFnError> {
     let instance = next_instance();
-    let body =
-        serde_json::to_string(args).map_err(|e| ServerFnError::ParseError(e.to_string()))?;
+    let body = serde_json::to_string(args).map_err(|e| ServerFnError::ParseError(e.to_string()))?;
 
     let resp = client
         .post("https://opencode.ai/_server")
@@ -109,9 +108,8 @@ pub async fn call_no_args<T: DeserializeOwned>(
 /// 2. 将无引号的 key 转为带引号的
 /// 3. 作为 JSON 解析
 fn parse_r_response<T: DeserializeOwned>(text: &str) -> Result<T, ServerFnError> {
-    let re = RE_PREFIX.get_or_init(|| {
-        Regex::new(r#"\$R\[0\]\s*=\s*"#).expect("hardcoded R-prefix regex")
-    });
+    let re = RE_PREFIX
+        .get_or_init(|| Regex::new(r#"\$R\[0\]\s*=\s*"#).expect("hardcoded R-prefix regex"));
 
     if let Some(cap) = re.find(text) {
         let after = &text[cap.end()..];
@@ -140,8 +138,8 @@ fn parse_r_response<T: DeserializeOwned>(text: &str) -> Result<T, ServerFnError>
 /// 1. 剥离 `$R[N]=` 前缀
 /// 2. 给无引号对象 key 加上引号 `key:` → `"key":`
 fn solidjs_to_json(s: &str) -> String {
-    let re_ref = RE_REF
-        .get_or_init(|| Regex::new(r#"\$R\[\d+\]="#).expect("hardcoded R-ref regex"));
+    let re_ref =
+        RE_REF.get_or_init(|| Regex::new(r#"\$R\[\d+\]="#).expect("hardcoded R-ref regex"));
     let cleaned = re_ref.replace_all(s, "").to_string();
     let re_key = RE_KEY.get_or_init(|| {
         Regex::new(r#"(?m)(^|[{,]\s*)([a-zA-Z_]\w*)\s*:"#).expect("hardcoded key regex")

@@ -11,7 +11,7 @@ export function DashboardScreen() {
   if (isPending) {
     return (
       <div className="space-y-6">
-        <div className="grid grid-cols-2 lg:grid-cols-[1.5fr_1fr_1fr_1fr] gap-3 md:gap-4">
+        <div className="grid grid-cols-2 lg:grid-cols-[1.5fr_1fr_1fr_1fr_1fr] gap-3 md:gap-4">
           <Skeleton className="h-28" />
           <Skeleton className="h-28" />
           <Skeleton className="h-28" />
@@ -40,9 +40,10 @@ export function DashboardScreen() {
     );
   }
 
-  const goWorkspaces = data.accounts.flatMap((a) =>
-    a.workspaces.filter((w) => w.subscribed),
-  );
+  const goWorkspaces = data.accounts.flatMap((a) => a.workspaces);
+  const availableWorkspaces = goWorkspaces.filter((w) => w.status === "available");
+  const exhaustedWorkspaces = goWorkspaces.filter((w) => w.status === "exhausted");
+  const unsubscribedWorkspaces = goWorkspaces.filter((w) => w.status === "unsubscribed");
   const totalKeys = data.total_keys;
   const availablePercent =
     totalKeys > 0 ? Math.round((data.available_keys / totalKeys) * 100) : 0;
@@ -50,7 +51,7 @@ export function DashboardScreen() {
   return (
     <div className="max-w-5xl space-y-8">
       {/* Hero section — asymmetric stat layout */}
-      <div className="grid grid-cols-2 lg:grid-cols-[1.5fr_1fr_1fr_1fr] gap-3 md:gap-4">
+      <div className="grid grid-cols-2 lg:grid-cols-[1.5fr_1fr_1fr_1fr_1fr] gap-3 md:gap-4">
         {/* Primary stat — larger, with decorative element */}
         <motion.div
           initial={{ opacity: 0, y: 12 }}
@@ -70,7 +71,7 @@ export function DashboardScreen() {
           </div>
 
           <span className="text-xs text-espresso-400 uppercase tracking-[0.15em] font-semibold">
-            密钥总数
+            Key 总数
           </span>
           <motion.p
             className="text-5xl font-bold text-espresso-700 mt-2 tracking-tight tabular-nums"
@@ -96,22 +97,28 @@ export function DashboardScreen() {
         </motion.div>
 
         <StatCard
-          label="可用密钥"
+          label="可调度 Key"
           value={data.available_keys}
           tone="success"
           delay={0.05}
         />
         <StatCard
-          label="已耗尽"
-          value={data.depleted_keys}
-          tone="danger"
+          label="可用工作区"
+          value={availableWorkspaces.length}
+          tone="info"
           delay={0.1}
         />
         <StatCard
-          label="Go 工作区"
-          value={goWorkspaces.length}
-          tone="info"
+          label="当前无额度"
+          value={exhaustedWorkspaces.length}
+          tone="danger"
           delay={0.15}
+        />
+        <StatCard
+          label="无订阅"
+          value={unsubscribedWorkspaces.length}
+          tone="default"
+          delay={0.2}
         />
       </div>
 
