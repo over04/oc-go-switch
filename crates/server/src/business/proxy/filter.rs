@@ -27,21 +27,17 @@ pub fn filter_openai_messages(
 
             for part in parts {
                 match part {
-                    OpenAiContentPart::ImageUrl { .. } => match rule.action {
+                    OpenAiContentPart::ImageUrl { .. } => match &rule.action {
                         FilterAction::PassThrough => {
                             new_parts.push(part.clone());
                         }
                         FilterAction::Remove => {
                             modified = true;
                         }
-                        FilterAction::Replace => {
+                        FilterAction::Replace { replacement } => {
                             modified = true;
-                            let text = rule
-                                .replacement
-                                .clone()
-                                .unwrap_or_else(|| "[图片已移除]".to_string());
                             new_parts.push(OpenAiContentPart::Text {
-                                text,
+                                text: replacement.clone(),
                                 extra: HashMap::new(),
                             });
                         }
@@ -88,21 +84,17 @@ pub fn filter_claude_messages(
 
             for block in blocks {
                 match block {
-                    AnthropicContentBlock::Image { .. } => match rule.action {
+                    AnthropicContentBlock::Image { .. } => match &rule.action {
                         FilterAction::PassThrough => {
                             new_blocks.push(block.clone());
                         }
                         FilterAction::Remove => {
                             modified = true;
                         }
-                        FilterAction::Replace => {
+                        FilterAction::Replace { replacement } => {
                             modified = true;
-                            let text = rule
-                                .replacement
-                                .clone()
-                                .unwrap_or_else(|| "[图片已移除]".to_string());
                             new_blocks.push(AnthropicContentBlock::Text {
-                                text,
+                                text: replacement.clone(),
                                 extra: HashMap::new(),
                             });
                         }

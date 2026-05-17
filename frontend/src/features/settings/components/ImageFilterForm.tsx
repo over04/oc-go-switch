@@ -51,7 +51,7 @@ export function ImageFilterForm({ models, onChange }: ImageFilterFormProps) {
   function addRule() {
     onChange([
       ...models,
-      { model: "", action: "pass_through", replacement: null },
+      { model: "", action: "pass_through" },
     ]);
   }
 
@@ -59,8 +59,36 @@ export function ImageFilterForm({ models, onChange }: ImageFilterFormProps) {
     onChange(models.filter((_, i) => i !== idx));
   }
 
-  function updateRule(idx: number, patch: Partial<ImageFilterModel>) {
-    onChange(models.map((m, i) => (i === idx ? { ...m, ...patch } : m)));
+  function updateRule(idx: number, rule: ImageFilterModel) {
+    onChange(models.map((m, i) => (i === idx ? rule : m)));
+  }
+
+  function updateModel(idx: number, model: string) {
+    const rule = models[idx];
+    if (!rule) return;
+    updateRule(idx, { ...rule, model });
+  }
+
+  function updateAction(idx: number, action: FilterAction) {
+    const rule = models[idx];
+    if (!rule) return;
+
+    if (action === "replace") {
+      updateRule(idx, {
+        model: rule.model,
+        action,
+        replacement: rule.action === "replace" ? rule.replacement : "[图片已移除]",
+      });
+      return;
+    }
+
+    updateRule(idx, { model: rule.model, action });
+  }
+
+  function updateReplacement(idx: number, replacement: string) {
+    const rule = models[idx];
+    if (!rule || rule.action !== "replace") return;
+    updateRule(idx, { ...rule, replacement });
   }
 
   return (
@@ -91,7 +119,7 @@ export function ImageFilterForm({ models, onChange }: ImageFilterFormProps) {
           <ModelPicker
             value={rule.model}
             suggestions={availableModels}
-            onChange={(v) => updateRule(idx, { model: v })}
+            onChange={(v) => updateModel(idx, v)}
           />
 
           <div>
@@ -102,7 +130,7 @@ export function ImageFilterForm({ models, onChange }: ImageFilterFormProps) {
               size="xs"
               value={rule.action}
               onChange={(v) =>
-                updateRule(idx, { action: v as FilterAction })
+                updateAction(idx, v as FilterAction)
               }
               options={ACTION_OPTIONS}
             />
@@ -116,11 +144,9 @@ export function ImageFilterForm({ models, onChange }: ImageFilterFormProps) {
               <Input
                 size="xs"
                 placeholder="[Image removed]"
-                value={rule.replacement ?? ""}
+                value={rule.replacement}
                 onChange={(e) =>
-                  updateRule(idx, {
-                    replacement: e.target.value || null,
-                  })
+                  updateReplacement(idx, e.target.value)
                 }
               />
             </div>

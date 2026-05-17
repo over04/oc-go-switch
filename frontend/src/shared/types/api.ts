@@ -61,11 +61,14 @@ export interface AccountListResponse {
 
 export type FilterAction = "pass_through" | "remove" | "replace";
 
-export interface ImageFilterModel {
+interface ImageFilterModelBase {
   model: string;
-  action: FilterAction;
-  replacement?: string | null;
 }
+
+export type ImageFilterModel =
+  | (ImageFilterModelBase & { action: "pass_through" })
+  | (ImageFilterModelBase & { action: "remove" })
+  | (ImageFilterModelBase & { action: "replace"; replacement: string });
 
 export interface ImageFilterConfig {
   models: ImageFilterModel[];

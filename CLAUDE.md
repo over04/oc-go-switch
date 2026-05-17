@@ -54,7 +54,7 @@ The frontend dist is embedded into the Rust binary via `rust-embed` (`src/api/ro
 
 **`model/`** — `LogEntry` and `Direction` (OpenAI/Claude) types for request logging.
 
-**`config.rs`** — YAML config: `listen`, `accounts`, `refresh_interval_secs`, `max_retries`, `go.base_url`, `go.connect_timeout_secs`, `go.request_timeout_secs`, `image_filter` (per-model rules with `FilterAction` enum).
+**`config.rs`** — YAML config: `listen`, `accounts`, `refresh_interval_secs`, `max_retries`, `go.base_url`, `go.connect_timeout_secs`, `go.request_timeout_secs`, `image_filter` (per-model rules with `FilterAction` enum; `replace` carries its replacement text in the enum variant).
 
 ### Frontend (`frontend/src/`)
 

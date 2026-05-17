@@ -33,6 +33,7 @@ use crate::{
 pub struct KeyPoolHandle {
     inner: Arc<RwLock<KeyPool>>,
     config_tx: watch::Sender<Arc<Config>>,
+    config_rx: watch::Receiver<Arc<Config>>,
     config_store: ConfigStore,
     log_store: Arc<LogStore>,
     pub proxy_client: reqwest::Client,
@@ -56,11 +57,12 @@ impl KeyPoolHandle {
             .connect_timeout(connect_timeout)
             .timeout(request_timeout)
             .build()?;
-        let (config_tx, _config_rx) = watch::channel(Arc::new(config));
+        let (config_tx, config_rx) = watch::channel(Arc::new(config));
 
         Ok(Self {
             inner: Arc::new(RwLock::new(pool)),
             config_tx,
+            config_rx,
             config_store,
             log_store,
             proxy_client,
@@ -74,7 +76,7 @@ impl KeyPoolHandle {
     }
 
     pub fn config_snapshot(&self) -> Arc<Config> {
-        self.config_tx.borrow().clone()
+        self.config_rx.borrow().clone()
     }
 
     pub async fn save_config_snapshot(&self, next: Config) -> Result<(), PoolError> {
