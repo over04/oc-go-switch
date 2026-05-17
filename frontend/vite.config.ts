@@ -11,7 +11,6 @@ export default defineConfig({
   },
   server: {
     proxy: {
-      "/pool": "http://localhost:8180",
       "/api": "http://localhost:8180",
     },
   },

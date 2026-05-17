@@ -4,10 +4,10 @@ import { AnimatePresence, motion } from "framer-motion";
 import { Sidebar } from "@/shared/ui/Sidebar";
 import { HealthDot } from "@/features/pool/components/HealthDot";
 import { ToastContainer } from "@/shared/ui/ToastContainer";
-import { usePoolStatus } from "@/features/pool/logic/usePoolStatus";
+import { useDashboardStatus } from "@/features/dashboard/logic/useDashboardStatus";
 
 export function AppLayout() {
-  const { data, isError } = usePoolStatus();
+  const { isError } = useDashboardStatus();
   const location = useLocation();
   const [sidebarOpen, setSidebarOpen] = useState(false);
 
@@ -18,9 +18,7 @@ export function AppLayout() {
       <Sidebar open={sidebarOpen} onClose={closeSidebar} />
 
       <div className="flex-1 flex flex-col min-w-0">
-        {/* Top bar */}
         <header className="shrink-0 h-11 flex items-center justify-between px-4 md:px-5 border-b border-cream-200 bg-white/80 backdrop-blur-sm">
-          {/* Hamburger for mobile */}
           <button
             onClick={() => setSidebarOpen((v) => !v)}
             className="md:hidden p-1.5 -ml-1 rounded-lg text-espresso-600 hover:bg-cream-100 transition-colors"
@@ -39,7 +37,6 @@ export function AppLayout() {
           <HealthDot healthy={!isError} />
         </header>
 
-        {/* Page content */}
         <main className="flex-1 overflow-y-auto p-4 md:p-5">
           <AnimatePresence mode="wait">
             <motion.div

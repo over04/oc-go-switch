@@ -14,8 +14,10 @@ import {
 } from "@/features/settings/service/settingsService";
 import { toastSuccess, toastError } from "@/shared/lib/toast";
 import { Skeleton } from "@/shared/ui/Skeleton";
-import { POOL_STATUS_KEY } from "@/features/pool/logic/usePoolStatus";
-import { usePoolStatus } from "@/features/pool/logic/usePoolStatus";
+import {
+  WORKSPACE_SCHEDULE_KEY,
+  useWorkspaceSchedule,
+} from "@/features/workspaces/logic/useWorkspaceSchedule";
 
 const ACCOUNTS_KEY = ["api", "accounts"] as const;
 
@@ -30,7 +32,7 @@ export function AccountsScreen() {
     queryFn: getAccounts,
     staleTime: 30_000,
   });
-  const { data: poolData } = usePoolStatus();
+  const { data: scheduleData } = useWorkspaceSchedule();
   const [showAdd, setShowAdd] = useState(false);
   const [deleting, setDeleting] = useState<string | null>(null);
   const [editing, setEditing] = useState<string | null>(null);
@@ -44,7 +46,7 @@ export function AccountsScreen() {
         await deleteAccount(name);
         await Promise.all([
           queryClient.invalidateQueries({ queryKey: ACCOUNTS_KEY }),
-          queryClient.invalidateQueries({ queryKey: POOL_STATUS_KEY }),
+          queryClient.invalidateQueries({ queryKey: WORKSPACE_SCHEDULE_KEY }),
         ]);
         toastSuccess(`已删除 "${name}"`);
       } catch (e) {
@@ -61,7 +63,7 @@ export function AccountsScreen() {
       await addAccount(name, auth, label);
       await Promise.all([
         queryClient.invalidateQueries({ queryKey: ACCOUNTS_KEY }),
-        queryClient.invalidateQueries({ queryKey: POOL_STATUS_KEY }),
+        queryClient.invalidateQueries({ queryKey: WORKSPACE_SCHEDULE_KEY }),
       ]);
       toastSuccess(`已添加 "${label}"`);
     },
@@ -114,10 +116,10 @@ export function AccountsScreen() {
       {/* Account cards */}
       <div className="space-y-4">
         {accountList?.accounts.map((acct, i) => {
-          const poolAcct = poolData?.accounts.find(
+          const scheduleAcct = scheduleData?.accounts.find(
             (a) => a.name === acct.name,
           );
-          const workspaces = poolAcct?.workspaces ?? [];
+          const workspaces = scheduleAcct?.workspaces ?? [];
           const keyCount = workspaces.reduce((s, w) => s + w.keys.length, 0);
 
           return (

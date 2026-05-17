@@ -1,9 +1,15 @@
-[package]
-name = "oc-go-switch"
+[workspace]
+members = [
+    "crates/server",
+    "crates/adapter",
+]
+resolver = "2"
+
+[workspace.package]
 version = "0.1.0"
 edition = "2021"
 
-[dependencies]
+[workspace.dependencies]
 axum = "0.8"
 tokio = { version = "1", features = ["full"] }
 reqwest = { version = "0.12", features = ["cookies", "json", "stream"] }
@@ -17,5 +23,5 @@ rust-embed = "8"
 tower-http = { version = "0.6", features = ["cors"] }
 thiserror = "2"
 regex = "1"
-anyhow = "1"
 chrono = { version = "0.4", features = ["serde"] }
+adapter = { path = "crates/adapter" }

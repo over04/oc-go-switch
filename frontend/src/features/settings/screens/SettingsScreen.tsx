@@ -20,6 +20,9 @@ export function SettingsScreen() {
   });
   const [refreshInterval, setRefreshInterval] = useState(300);
   const [maxRetries, setMaxRetries] = useState(10);
+  const [baseUrl, setBaseUrl] = useState("");
+  const [connectTimeout, setConnectTimeout] = useState(90);
+  const [requestTimeout, setRequestTimeout] = useState(90);
   const [imageFilterModels, setImageFilterModels] = useState<ImageFilterModel[]>([]);
   const [saving, setSaving] = useState(false);
 
@@ -27,6 +30,9 @@ export function SettingsScreen() {
     if (data) {
       setRefreshInterval(data.refresh_interval_secs);
       setMaxRetries(data.max_retries);
+      setBaseUrl(data.go.base_url);
+      setConnectTimeout(data.go.connect_timeout_secs);
+      setRequestTimeout(data.go.request_timeout_secs);
       setImageFilterModels(data.image_filter?.models ?? []);
     }
   }, [data]);
@@ -37,6 +43,11 @@ export function SettingsScreen() {
       await updateConfig({
         refresh_interval_secs: refreshInterval,
         max_retries: maxRetries,
+        go: {
+          base_url: baseUrl,
+          connect_timeout_secs: connectTimeout,
+          request_timeout_secs: requestTimeout,
+        },
         image_filter: { models: imageFilterModels },
       });
       queryClient.invalidateQueries({ queryKey: CONFIG_KEY });
@@ -46,7 +57,7 @@ export function SettingsScreen() {
     } finally {
       setSaving(false);
     }
-  }, [refreshInterval, maxRetries, imageFilterModels, queryClient]);
+  }, [refreshInterval, maxRetries, baseUrl, connectTimeout, requestTimeout, imageFilterModels, queryClient]);
 
   if (isPending)
     return (
@@ -83,9 +94,13 @@ export function SettingsScreen() {
             listen={data.listen}
             refreshIntervalSecs={refreshInterval}
             maxRetries={maxRetries}
-            baseUrl={data.go.base_url}
+            baseUrl={baseUrl}
+            connectTimeoutSecs={connectTimeout}
+            requestTimeoutSecs={requestTimeout}
             onChangeRefreshInterval={setRefreshInterval}
             onChangeMaxRetries={setMaxRetries}
+            onChangeConnectTimeout={setConnectTimeout}
+            onChangeRequestTimeout={setRequestTimeout}
           />
         </div>
       </motion.div>

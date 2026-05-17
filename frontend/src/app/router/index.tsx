@@ -1,7 +1,7 @@
 import { createBrowserRouter, Navigate, Outlet } from "react-router-dom";
 import { AppLayout } from "@/app/layouts/AppLayout";
 import { DashboardScreen } from "@/features/dashboard/screens/DashboardScreen";
-import { KeysScreen } from "@/features/keys/screens/KeysScreen";
+import { WorkspacesScreen } from "@/features/workspaces/screens/WorkspacesScreen";
 import { ModelsScreen } from "@/features/models/screens/ModelsScreen";
 import { LogsScreen } from "@/features/logs/screens/LogsScreen";
 import { AccountsScreen } from "@/features/accounts/screens/AccountsScreen";
@@ -50,7 +50,7 @@ export const router = createBrowserRouter([{
   element: <ProtectedLayout />,
   children: [
     { index: true, element: <DashboardScreen /> },
-    { path: "keys", element: <KeysScreen /> },
+    { path: "workspaces", element: <WorkspacesScreen /> },
     { path: "models", element: <ModelsScreen /> },
     { path: "logs", element: <LogsScreen /> },
     { path: "accounts", element: <AccountsScreen /> },

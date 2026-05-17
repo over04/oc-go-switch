@@ -33,11 +33,20 @@ export interface AccountStatus {
   workspaces: WorkspaceStatus[];
 }
 
-export interface PoolStatusResponse {
+export interface WorkspaceScheduleResponse {
+  current_key_id: string | null;
+  last_refresh_at: string | null;
+  accounts: AccountStatus[];
+}
+
+export interface DashboardStatusResponse {
   total_keys: number;
   available_keys: number;
-  current_key_id: string | null;
-  accounts: AccountStatus[];
+  available_workspaces: number;
+  exhausted_workspaces: number;
+  unsubscribed_workspaces: number;
+  last_refresh_at: string | null;
+  go_workspaces: WorkspaceStatus[];
 }
 
 export interface AccountListEntry {
@@ -66,7 +75,11 @@ export interface ConfigResponse {
   listen: string;
   refresh_interval_secs: number;
   max_retries: number;
-  go: { base_url: string };
+  go: {
+    base_url: string;
+    connect_timeout_secs: number;
+    request_timeout_secs: number;
+  };
   accounts: AccountListEntry[];
   image_filter: ImageFilterConfig;
   api_token_set: boolean;

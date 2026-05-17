@@ -54,14 +54,14 @@ The frontend dist is embedded into the Rust binary via `rust-embed` (`src/api/ro
 
 **`model/`** — `LogEntry` and `Direction` (OpenAI/Claude) types for request logging.
 
-**`config.rs`** — YAML config: `listen`, `accounts`, `refresh_interval_secs`, `max_retries`, `go.base_url`, `image_filter` (per-model rules with `FilterAction` enum).
+**`config.rs`** — YAML config: `listen`, `accounts`, `refresh_interval_secs`, `max_retries`, `go.base_url`, `go.connect_timeout_secs`, `go.request_timeout_secs`, `image_filter` (per-model rules with `FilterAction` enum).
 
 ### Frontend (`frontend/src/`)
 
 React 19 SPA, embedded in Rust binary. Uses Tailwind (custom cream/espresso/terra/harvest palette), framer-motion animations, TanStack Query for data fetching.
 
 - `features/dashboard/` — Key pool stats + Go usage overview
-- `features/keys/` — Key table with search/filter, active key bar
+- `features/workspaces/` — Workspace scheduling view with search/filter, active key bar
 - `features/models/` — Model list by provider (OpenAI/Claude tabs)
 - `features/logs/` — Request log table with protocol/success filters
 - `features/accounts/` — Account CRUD with workspace sections
@@ -88,6 +88,8 @@ refresh_interval_secs: 6000
 max_retries: 10
 go:
   base_url: "https://opencode.ai/zen/go/v1"
+  connect_timeout_secs: 90
+  request_timeout_secs: 90
 image_filter:
   models:
     - model: "gpt-4"

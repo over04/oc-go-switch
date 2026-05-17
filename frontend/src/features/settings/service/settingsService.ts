@@ -31,6 +31,7 @@ export function updateConfig(
   patch: Partial<{
     refresh_interval_secs: number;
     max_retries: number;
+    go: import("@/shared/types/api").ConfigResponse["go"];
     image_filter: import("@/shared/types/api").ImageFilterConfig;
   }>,
 ): Promise<ConfigResponse> {
@@ -41,8 +42,8 @@ export function updateConfig(
   });
 }
 
-export function refreshPool(): Promise<void> {
-  return postEmpty("/api/pool/refresh");
+export function refreshWorkspaces(): Promise<void> {
+  return postEmpty("/api/workspaces/refresh");
 }
 
 export function editAccount(
@@ -59,7 +60,7 @@ export function editAccount(
 export function setActiveKey(
   keyId: string,
 ): Promise<{ status: string }> {
-  return fetchJson<{ status: string }>("/api/pool/active-key", {
+  return fetchJson<{ status: string }>("/api/workspaces/active-key", {
     method: "PUT",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ key_id: keyId }),
@@ -67,7 +68,7 @@ export function setActiveKey(
 }
 
 export function clearActiveKey(): Promise<{ status: string }> {
-  return fetchJson<{ status: string }>("/api/pool/active-key", {
+  return fetchJson<{ status: string }>("/api/workspaces/active-key", {
     method: "DELETE",
   });
 }

@@ -15,7 +15,6 @@ export function Sidebar({ open, onClose }: SidebarProps) {
 
   return (
     <>
-      {/* Mobile backdrop */}
       <AnimatePresence>
         {open && (
           <motion.div
@@ -29,7 +28,6 @@ export function Sidebar({ open, onClose }: SidebarProps) {
         )}
       </AnimatePresence>
 
-      {/* Sidebar panel */}
       <aside
         className={clsx(
           "fixed md:static inset-y-0 left-0 z-50",
@@ -38,7 +36,6 @@ export function Sidebar({ open, onClose }: SidebarProps) {
           open ? "translate-x-0" : "-translate-x-full md:translate-x-0",
         )}
       >
-        {/* Logo area */}
         <motion.div
           className="h-14 flex items-center px-5 border-b border-espresso-700/50 relative overflow-hidden shrink-0"
           initial={{ opacity: 0 }}
@@ -54,7 +51,6 @@ export function Sidebar({ open, onClose }: SidebarProps) {
           </span>
         </motion.div>
 
-        {/* Navigation */}
         <nav className="flex-1 py-4 px-3 space-y-1 overflow-y-auto">
           <NavItem
             to="/"
@@ -71,7 +67,7 @@ export function Sidebar({ open, onClose }: SidebarProps) {
             </span>
           </div>
           <NavItem
-            to="/keys"
+            to="/workspaces"
             label="工作区调度"
             location={location}
             index={1}

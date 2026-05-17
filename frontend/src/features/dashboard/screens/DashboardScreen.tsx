@@ -1,12 +1,12 @@
 import { motion } from "framer-motion";
-import { usePoolStatus } from "@/features/pool/logic/usePoolStatus";
+import { useDashboardStatus } from "@/features/dashboard/logic/useDashboardStatus";
 import { REFRESH_INTERVAL_MS } from "@/shared/config";
 import { StatCard } from "../components/StatCard";
 import { GoUsageOverview } from "../components/GoUsageOverview";
 import { Skeleton } from "@/shared/ui/Skeleton";
 
 export function DashboardScreen() {
-  const { data, isPending, isError, dataUpdatedAt } = usePoolStatus();
+  const { data, isPending, isError, dataUpdatedAt } = useDashboardStatus();
 
   if (isPending) {
     return (
@@ -40,26 +40,20 @@ export function DashboardScreen() {
     );
   }
 
-  const goWorkspaces = data.accounts.flatMap((a) => a.workspaces);
-  const availableWorkspaces = goWorkspaces.filter((w) => w.status === "available");
-  const exhaustedWorkspaces = goWorkspaces.filter((w) => w.status === "exhausted");
-  const unsubscribedWorkspaces = goWorkspaces.filter((w) => w.status === "unsubscribed");
+  const goWorkspaces = data.go_workspaces;
   const totalKeys = data.total_keys;
   const availablePercent =
     totalKeys > 0 ? Math.round((data.available_keys / totalKeys) * 100) : 0;
 
   return (
     <div className="max-w-5xl space-y-8">
-      {/* Hero section — asymmetric stat layout */}
       <div className="grid grid-cols-2 lg:grid-cols-[1.5fr_1fr_1fr_1fr_1fr] gap-3 md:gap-4">
-        {/* Primary stat — larger, with decorative element */}
         <motion.div
           initial={{ opacity: 0, y: 12 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.4 }}
           className="relative overflow-hidden bg-white rounded-mcm-xl border border-cream-200 shadow-mcm p-5"
         >
-          {/* Decorative starburst */}
           <div className="absolute -top-6 -right-6 w-24 h-24 opacity-[0.06]">
             <svg viewBox="0 0 100 100">
               <circle cx="50" cy="50" r="48" fill="none" stroke="currentColor" strokeWidth="1" className="text-espresso-700" />
@@ -104,25 +98,24 @@ export function DashboardScreen() {
         />
         <StatCard
           label="可用工作区"
-          value={availableWorkspaces.length}
+          value={data.available_workspaces}
           tone="info"
           delay={0.1}
         />
         <StatCard
           label="当前无额度"
-          value={exhaustedWorkspaces.length}
+          value={data.exhausted_workspaces}
           tone="danger"
           delay={0.15}
         />
         <StatCard
           label="无订阅"
-          value={unsubscribedWorkspaces.length}
+          value={data.unsubscribed_workspaces}
           tone="default"
           delay={0.2}
         />
       </div>
 
-      {/* Go usage section */}
       {goWorkspaces.length > 0 && (
         <section>
           <div className="flex items-center gap-3 mb-4">
@@ -139,8 +132,7 @@ export function DashboardScreen() {
         </section>
       )}
 
-      {/* Empty state */}
-      {data.accounts.length === 0 && (
+      {goWorkspaces.length === 0 && (
         <motion.div
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
@@ -156,7 +148,6 @@ export function DashboardScreen() {
         </motion.div>
       )}
 
-      {/* Subtle refresh indicator */}
       <div className="flex items-center gap-2 text-xs text-espresso-300">
         <span className="w-1.5 h-1.5 rounded-full bg-harvest-500/40" />
         自动刷新 {REFRESH_INTERVAL_MS / 1000}s · 上次更新{" "}

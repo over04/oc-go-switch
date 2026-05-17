@@ -3,7 +3,6 @@ export const API_BASE = "";
 
 export const ROUTES = {
   dashboard: "/",
-  keys: "/keys",
   workspaces: "/workspaces",
   accounts: "/accounts",
   settings: "/settings",
