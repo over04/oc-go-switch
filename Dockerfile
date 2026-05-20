@@ -26,7 +26,7 @@ FROM debian:bookworm-slim
 RUN apt-get update && apt-get install -y --no-install-recommends \
     ca-certificates \
     && rm -rf /var/lib/apt/lists/*
-WORKDIR /
+WORKDIR /app
 COPY --from=builder /usr/local/bin/oc-go-switch /usr/local/bin/oc-go-switch
 EXPOSE 8180
 ENTRYPOINT ["oc-go-switch"]
