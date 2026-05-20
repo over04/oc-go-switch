@@ -18,3 +18,4 @@ tower-http.workspace = true
 thiserror.workspace = true
 chrono.workspace = true
 adapter.workspace = true
+arc-swap.workspace = true

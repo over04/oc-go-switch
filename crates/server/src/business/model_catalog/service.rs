@@ -12,8 +12,9 @@ pub async fn fetch_model_list(
         .ok_or_else(|| "没有可用 Go 工作区".to_string())?;
     let url = format!("{}/models", base_url);
 
-    let resp = handle
-        .short_client
+    let clients = handle.clients();
+    let resp = clients
+        .short
         .get(&url)
         .header("Authorization", format!("Bearer {}", key.key_value))
         .send()

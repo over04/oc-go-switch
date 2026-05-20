@@ -12,7 +12,7 @@ pub async fn admin_auth_middleware(
     request: Request<axum::body::Body>,
     next: middleware::Next,
 ) -> Result<Response, StatusCode> {
-    let expected = handle.config_snapshot();
+    let expected = handle.runtime_config();
     authorize_admin(&request, &expected.api_token)?;
     Ok(next.run(request).await)
 }
@@ -22,7 +22,7 @@ pub async fn openai_auth_middleware(
     request: Request<axum::body::Body>,
     next: middleware::Next,
 ) -> Result<Response, StatusCode> {
-    let expected = handle.config_snapshot();
+    let expected = handle.runtime_config();
     authorize_openai(&request, &expected.api_token)?;
     Ok(next.run(request).await)
 }
@@ -32,7 +32,7 @@ pub async fn claude_auth_middleware(
     request: Request<axum::body::Body>,
     next: middleware::Next,
 ) -> Result<Response, StatusCode> {
-    let expected = handle.config_snapshot();
+    let expected = handle.runtime_config();
     authorize_claude(&request, &expected.api_token)?;
     Ok(next.run(request).await)
 }

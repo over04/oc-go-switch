@@ -15,23 +15,25 @@ pub async fn run() {
     let config_store = ConfigStore::new("config.yaml");
     let config = load_config(&config_store).await;
 
-    info!("启动 oc-go-switch，已配置 {} 个账户", config.accounts.len());
+    info!(
+        "启动 oc-go-switch，已配置 {} 个账户",
+        config.runtime.accounts.len()
+    );
 
-    let pool = discover(&config).await.unwrap_or_else(|error| {
+    let pool = discover(&config.runtime).await.unwrap_or_else(|error| {
         error!("发现 key 失败: {error}");
         std::process::exit(1);
     });
     log_pool_ready(&pool);
 
-    let refresh_interval = config.refresh_interval_secs;
-    let listen = config.listen.clone();
+    let listen = config.fixed.listen.clone();
     let handle = KeyPoolHandle::try_new(pool, config, config_store, Arc::new(LogStore::new()))
         .unwrap_or_else(|error| {
             error!("初始化 key pool 失败: {error}");
             std::process::exit(1);
         });
 
-    spawn_refresh_task(&handle, refresh_interval);
+    spawn_refresh_task(&handle);
     serve(listen, handle).await;
 }
 
@@ -52,15 +54,21 @@ fn log_pool_ready(pool: &KeyPool) {
     info!("KeyPool 就绪: {total_workspaces} 个 Go 工作区，{total_keys} 个 key");
 }
 
-fn spawn_refresh_task(handle: &KeyPoolHandle, refresh_interval: u64) {
-    if refresh_interval == 0 {
-        return;
-    }
-
+fn spawn_refresh_task(handle: &KeyPoolHandle) {
     let refresh_handle = handle.clone();
     tokio::spawn(async move {
         loop {
-            tokio::time::sleep(Duration::from_secs(refresh_interval)).await;
+            let refresh_interval = refresh_handle.runtime_config().refresh_interval_secs;
+            if refresh_interval == 0 {
+                refresh_handle.wait_config_change().await;
+                continue;
+            }
+            tokio::select! {
+                _ = tokio::time::sleep(Duration::from_secs(refresh_interval)) => {}
+                _ = refresh_handle.wait_config_change() => {
+                    continue;
+                }
+            }
             info!("后台刷新: 更新余额...");
             match refresh_handle.refresh_now().await {
                 Ok(true) => info!("后台刷新完成"),

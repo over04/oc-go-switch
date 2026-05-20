@@ -1,12 +1,9 @@
 use serde::Deserialize;
 
-use crate::common::config::{go::GoConfig, image_filter::ImageFilterConfig};
+use crate::business::configuration::dto::runtime_update::ConfigurationRuntimeUpdateReqDto;
 
 #[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct ConfigurationUpdateReqDto {
-    pub refresh_interval_secs: Option<u64>,
-    pub max_retries: Option<usize>,
-    pub go: Option<GoConfig>,
-    pub image_filter: Option<ImageFilterConfig>,
-    pub api_token: Option<String>,
+    pub runtime: Option<ConfigurationRuntimeUpdateReqDto>,
 }

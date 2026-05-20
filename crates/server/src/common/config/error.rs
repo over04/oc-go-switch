@@ -11,6 +11,9 @@ pub enum ConfigError {
     /// 重试次数上限异常，防止单个请求在故障时长时间占用资源。
     #[error("max_retries 不能超过 100，当前值为 {0}")]
     MaxRetriesTooLarge(usize),
+    /// 监听地址无法解析为 socket 地址。
+    #[error("listen 无法解析为监听地址: {0}")]
+    InvalidListen(String),
     /// 必填 token 为空或只包含空白字符。
     #[error("config.yaml 缺少有效的 {0}")]
     MissingToken(&'static str),

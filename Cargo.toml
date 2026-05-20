@@ -24,4 +24,5 @@ tower-http = { version = "0.6", features = ["cors"] }
 thiserror = "2"
 regex = "1"
 chrono = { version = "0.4", features = ["serde"] }
+arc-swap = "1"
 adapter = { path = "crates/adapter" }

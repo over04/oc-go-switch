@@ -54,7 +54,7 @@ The frontend dist is embedded into the Rust binary via `rust-embed` (`src/api/ro
 
 **`model/`** — `LogEntry` and `Direction` (OpenAI/Claude) types for request logging.
 
-**`config.rs`** — YAML config: `listen`, `accounts`, `refresh_interval_secs`, `max_retries`, `go.base_url`, `go.connect_timeout_secs`, `go.request_timeout_secs`, `image_filter` (per-model rules with `FilterAction` enum; `replace` carries its replacement text in the enum variant).
+**`config.rs`** — YAML config: `fixed.listen` for startup-only settings and `runtime` for hot-updated accounts, refresh interval, retry policy, Go upstream, image filter, and API token.
 
 ### Frontend (`frontend/src/`)
 
@@ -79,22 +79,25 @@ React 19 SPA, embedded in Rust binary. Uses Tailwind (custom cream/espresso/terr
 ### Config (`config.yaml`)
 
 ```yaml
-listen: "0.0.0.0:8180"
-accounts:
-  - name: "main"
-    auth: "<opencode-auth-cookie>"
-    label: "主账号"
-refresh_interval_secs: 6000
-max_retries: 10
-go:
-  base_url: "https://opencode.ai/zen/go/v1"
-  connect_timeout_secs: 90
-  request_timeout_secs: 90
-image_filter:
-  models:
-    - model: "gpt-4"
-      action: remove           # pass_through | remove | replace
-    - model: "claude-3-haiku"
-      action: replace
-      replacement: "[Image not supported]"
+fixed:
+  listen: "0.0.0.0:8180"
+runtime:
+  accounts:
+    - name: "main"
+      auth: "<opencode-auth-cookie>"
+      label: "主账号"
+  refresh_interval_secs: 6000
+  max_retries: 10
+  go:
+    base_url: "https://opencode.ai/zen/go/v1"
+    connect_timeout_secs: 90
+    request_timeout_secs: 90
+  image_filter:
+    models:
+      - model: "gpt-4"
+        action: remove           # pass_through | remove | replace
+      - model: "claude-3-haiku"
+        action: replace
+        replacement: "[Image not supported]"
+  api_token: "admin-token"
 ```

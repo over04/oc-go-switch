@@ -1,26 +1,28 @@
-use std::{
-    sync::{
-        atomic::{AtomicBool, Ordering},
-        Arc,
-    },
-    time::Duration,
+use std::sync::{
+    atomic::{AtomicBool, Ordering},
+    Arc,
 };
 
+use arc_swap::ArcSwap;
 use chrono::Utc;
-use tokio::sync::{watch, RwLock, RwLockReadGuard};
+use tokio::sync::{RwLock, RwLockReadGuard};
 use tracing::{error, info};
 
 use crate::{
     business::{
         log::store::LogStore,
         workspace::{
+            client_set::ClientSet,
             discovery::discover,
             error::PoolError,
             scheduler::{KeyPool, SelectedKey},
         },
     },
     common::{
-        config::{store::ConfigStore, Config},
+        config::{
+            fixed::FixedConfig, runtime::RuntimeConfig, runtime_store::ConfigRuntime,
+            store::ConfigStore, Config,
+        },
         model::log::LogEntry,
     },
 };
@@ -32,12 +34,11 @@ use crate::{
 #[derive(Debug, Clone)]
 pub struct KeyPoolHandle {
     inner: Arc<RwLock<KeyPool>>,
-    config_tx: watch::Sender<Arc<Config>>,
-    config_rx: watch::Receiver<Arc<Config>>,
+    fixed_config: Arc<FixedConfig>,
+    config_runtime: ConfigRuntime,
     config_store: ConfigStore,
+    clients: Arc<ArcSwap<ClientSet>>,
     log_store: Arc<LogStore>,
-    pub proxy_client: reqwest::Client,
-    pub short_client: reqwest::Client,
     refresh_running: Arc<AtomicBool>,
 }
 
@@ -48,25 +49,17 @@ impl KeyPoolHandle {
         config_store: ConfigStore,
         log_store: Arc<LogStore>,
     ) -> Result<Self, PoolError> {
-        let connect_timeout = Duration::from_secs(config.go.connect_timeout_secs);
-        let request_timeout = Duration::from_secs(config.go.request_timeout_secs);
-        let proxy_client = reqwest::Client::builder()
-            .connect_timeout(connect_timeout)
-            .build()?;
-        let short_client = reqwest::Client::builder()
-            .connect_timeout(connect_timeout)
-            .timeout(request_timeout)
-            .build()?;
-        let (config_tx, config_rx) = watch::channel(Arc::new(config));
+        let clients = ClientSet::try_new(&config.runtime.go)?;
+        let fixed_config = Arc::new(config.fixed);
+        let config_runtime = ConfigRuntime::new(config.runtime);
 
         Ok(Self {
             inner: Arc::new(RwLock::new(pool)),
-            config_tx,
-            config_rx,
+            fixed_config,
+            config_runtime,
             config_store,
+            clients: Arc::new(ArcSwap::from_pointee(clients)),
             log_store,
-            proxy_client,
-            short_client,
             refresh_running: Arc::new(AtomicBool::new(false)),
         })
     }
@@ -75,15 +68,33 @@ impl KeyPoolHandle {
         self.inner.read().await
     }
 
-    pub fn config_snapshot(&self) -> Arc<Config> {
-        self.config_rx.borrow().clone()
+    pub fn fixed_config(&self) -> Arc<FixedConfig> {
+        self.fixed_config.clone()
     }
 
-    pub async fn save_config_snapshot(&self, next: Config) -> Result<(), PoolError> {
+    pub fn runtime_config(&self) -> Arc<RuntimeConfig> {
+        self.config_runtime.current()
+    }
+
+    pub fn clients(&self) -> Arc<ClientSet> {
+        self.clients.load_full()
+    }
+
+    pub async fn save_runtime_config(&self, next: RuntimeConfig) -> Result<(), PoolError> {
         next.validate()?;
-        self.config_store.save(&next).await?;
-        let _ = self.config_tx.send(Arc::new(next));
+        let clients = ClientSet::try_new(&next.go)?;
+        let config = Config {
+            fixed: self.fixed_config.as_ref().clone(),
+            runtime: next.clone(),
+        };
+        self.config_store.save(&config).await?;
+        self.clients.store(Arc::new(clients));
+        self.config_runtime.replace(next);
         Ok(())
+    }
+
+    pub async fn wait_config_change(&self) {
+        self.config_runtime.changed().await;
     }
 
     pub async fn set_active_key(&self, key_id: String) -> bool {
@@ -117,7 +128,7 @@ impl KeyPoolHandle {
             None => return Ok(false),
         };
 
-        let config = self.config_snapshot();
+        let config = self.runtime_config();
         let mut new_pool = discover(config.as_ref()).await?;
         new_pool.last_refresh_at = Some(Utc::now().to_rfc3339());
         let count = new_pool.available_workspace_count();

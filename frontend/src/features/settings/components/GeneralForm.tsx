@@ -9,6 +9,7 @@ interface GeneralFormProps {
   requestTimeoutSecs: number;
   onChangeRefreshInterval: (v: number) => void;
   onChangeMaxRetries: (v: number) => void;
+  onChangeBaseUrl: (v: string) => void;
   onChangeConnectTimeout: (v: number) => void;
   onChangeRequestTimeout: (v: number) => void;
 }
@@ -22,6 +23,7 @@ export function GeneralForm({
   requestTimeoutSecs,
   onChangeRefreshInterval,
   onChangeMaxRetries,
+  onChangeBaseUrl,
   onChangeConnectTimeout,
   onChangeRequestTimeout,
 }: GeneralFormProps) {
@@ -92,7 +94,11 @@ export function GeneralForm({
         <label className="block text-xs font-medium text-espresso-500 mb-1.5">
           上游 Base URL
         </label>
-        <Input value={baseUrl} disabled className="font-mono opacity-60" />
+        <Input
+          value={baseUrl}
+          className="font-mono"
+          onChange={(e) => onChangeBaseUrl(e.target.value)}
+        />
       </div>
     </div>
   );

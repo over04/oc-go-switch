@@ -47,7 +47,8 @@ pub async fn chat_completions(
 
     let model = req.model.clone();
     let is_stream = req.stream;
-    let config = handle.config_snapshot();
+    let config = handle.runtime_config();
+    let clients = handle.clients();
     let image_filter_config = config.image_filter.clone();
     let max_retries = config.max_retries;
     let base_url = config.go.base_url.clone();
@@ -107,8 +108,8 @@ pub async fn chat_completions(
             _attempt + 1,
         );
 
-        let resp = handle
-            .proxy_client
+        let resp = clients
+            .proxy
             .post(&upstream_url)
             .header(
                 reqwest::header::AUTHORIZATION,

@@ -1,46 +1,30 @@
 //! 配置命名空间。
 //!
-//! 该层只描述进程启动与运行时可修改的配置形状；业务层通过配置快照读取，
-//! 文件读写由 `store` 子模块负责，避免请求路径持有配置文件锁。
+//! `Config` 只表达磁盘配置形状：`fixed` 是启动期配置，`runtime` 是热更新配置。
+//! 请求路径读取 `ConfigRuntime`，配置写入由业务层服务统一处理。
 
 pub mod account;
 pub mod error;
 pub mod filter_action;
+pub mod fixed;
 pub mod go;
 pub mod image_filter;
 pub mod image_filter_model;
+pub mod runtime;
+pub mod runtime_store;
 pub mod store;
 
 use serde::{Deserialize, Serialize};
 
-use crate::common::config::{
-    account::AccountConfig, error::ConfigError, go::GoConfig, image_filter::ImageFilterConfig,
-};
+use crate::common::config::{error::ConfigError, fixed::FixedConfig, runtime::RuntimeConfig};
 
-/// 服务运行配置。
-///
-/// `api_token` 是管理 API、OpenAI 协议入口和 Anthropic 协议入口共同使用的强制鉴权值。
-/// 配置加载后立即校验，避免缺失 token 的进程继续启动。
+/// 服务配置文件。
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Config {
-    /// 服务监听地址，例如 `127.0.0.1:8180`。
-    pub listen: String,
-    /// OpenCode 账户列表，一个账户可发现多个工作区。
-    pub accounts: Vec<AccountConfig>,
-    /// 后台主动刷新工作区状态的间隔，单位秒；0 表示关闭后台刷新。
-    #[serde(default = "default_refresh_interval")]
-    pub refresh_interval_secs: u64,
-    /// 单次代理请求最多切换工作区重试的次数。
-    #[serde(default = "default_max_retries")]
-    pub max_retries: usize,
-    /// Go API 上游配置。
-    #[serde(default = "default_go")]
-    pub go: GoConfig,
-    /// 图片过滤规则，按模型精确匹配。
-    #[serde(default)]
-    pub image_filter: ImageFilterConfig,
-    /// 管理 API 与协议入口共用 token，空字符串属于配置错误。
-    pub api_token: String,
+    /// 启动期配置，保存后需要重启进程生效。
+    pub fixed: FixedConfig,
+    /// 运行期配置，保存后立即影响新请求和后台任务。
+    pub runtime: RuntimeConfig,
 }
 
 impl Config {
@@ -53,35 +37,9 @@ impl Config {
 
     /// 校验影响进程安全性和稳定性的配置项。
     pub fn validate(&self) -> Result<(), ConfigError> {
-        if self.max_retries > 100 {
-            return Err(ConfigError::MaxRetriesTooLarge(self.max_retries));
-        }
-        validate_token("api_token", &self.api_token)?;
-        Ok(())
+        self.fixed.validate()?;
+        self.runtime.validate()
     }
-}
-
-fn default_go() -> GoConfig {
-    GoConfig {
-        base_url: "https://api.opencode.ai/v1".to_string(),
-        connect_timeout_secs: go::default_timeout_secs(),
-        request_timeout_secs: go::default_timeout_secs(),
-    }
-}
-
-fn default_refresh_interval() -> u64 {
-    300
-}
-
-fn default_max_retries() -> usize {
-    10
-}
-
-fn validate_token(name: &'static str, value: &str) -> Result<(), ConfigError> {
-    if value.trim().is_empty() {
-        return Err(ConfigError::MissingToken(name));
-    }
-    Ok(())
 }
 
 #[cfg(test)]
@@ -90,17 +48,19 @@ mod tests {
 
     fn valid_yaml() -> String {
         r#"
-listen: 127.0.0.1:8180
-accounts: []
-refresh_interval_secs: 300
-max_retries: 8
-go:
-  base_url: https://opencode.ai/zen/go/v1
-  connect_timeout_secs: 90
-  request_timeout_secs: 90
-image_filter:
-  models: []
-api_token: admin-token
+fixed:
+  listen: 127.0.0.1:8180
+runtime:
+  accounts: []
+  refresh_interval_secs: 300
+  max_retries: 8
+  go:
+    base_url: https://opencode.ai/zen/go/v1
+    connect_timeout_secs: 90
+    request_timeout_secs: 90
+  image_filter:
+    models: []
+  api_token: admin-token
 "#
         .to_string()
     }
@@ -108,7 +68,7 @@ api_token: admin-token
     #[test]
     fn load_requires_api_token() -> Result<(), Box<dyn std::error::Error>> {
         let cfg = Config::from_yaml(&valid_yaml())?;
-        assert_eq!(cfg.api_token, "admin-token");
+        assert_eq!(cfg.runtime.api_token, "admin-token");
         Ok(())
     }
 

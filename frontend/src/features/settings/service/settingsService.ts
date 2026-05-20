@@ -29,10 +29,12 @@ export function getConfig(): Promise<ConfigResponse> {
 
 export function updateConfig(
   patch: Partial<{
-    refresh_interval_secs: number;
-    max_retries: number;
-    go: import("@/shared/types/api").ConfigResponse["go"];
-    image_filter: import("@/shared/types/api").ImageFilterConfig;
+    runtime: Partial<{
+      refresh_interval_secs: number;
+      max_retries: number;
+      go: import("@/shared/types/api").RuntimeConfigResponse["go"];
+      image_filter: import("@/shared/types/api").ImageFilterConfig;
+    }>;
   }>,
 ): Promise<ConfigResponse> {
   return fetchJson<ConfigResponse>("/api/config", {

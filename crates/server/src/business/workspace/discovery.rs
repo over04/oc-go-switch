@@ -7,7 +7,7 @@ use crate::{
         error::PoolError, key::PoolKey, record::WorkspacePool, scheduler::KeyPool,
         status::WorkspacePoolStatus,
     },
-    common::config::Config,
+    common::config::runtime::RuntimeConfig,
 };
 use adapter::opencode::{client::OpencodeClient, model::subscription_plan::SubscriptionPlan};
 
@@ -15,7 +15,7 @@ use adapter::opencode::{client::OpencodeClient, model::subscription_plan::Subscr
 ///
 /// 发现结果保留 available、exhausted、unsubscribed 三类工作区；
 /// 调度队列只从 available 工作区构建。
-pub async fn discover(config: &Config) -> Result<KeyPool, PoolError> {
+pub async fn discover(config: &RuntimeConfig) -> Result<KeyPool, PoolError> {
     let mut workspaces: HashMap<String, WorkspacePool> = HashMap::new();
 
     for account in &config.accounts {

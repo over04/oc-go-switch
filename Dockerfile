@@ -14,11 +14,11 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && rm -rf /var/lib/apt/lists/*
 WORKDIR /app
 COPY Cargo.toml Cargo.lock ./
-COPY src/ src/
+COPY crates/ crates/
 COPY --from=frontend /app/frontend/dist/ frontend/dist/
 RUN --mount=type=cache,target=/usr/local/cargo/registry,sharing=locked \
     --mount=type=cache,target=/app/target,sharing=locked \
-    cargo build --release && \
+    cargo build --release -p oc-go-switch && \
     cp /app/target/release/oc-go-switch /usr/local/bin/
 
 # ── 阶段 3：运行时最小镜像 ────────────────────────────
@@ -26,6 +26,7 @@ FROM debian:bookworm-slim
 RUN apt-get update && apt-get install -y --no-install-recommends \
     ca-certificates \
     && rm -rf /var/lib/apt/lists/*
+WORKDIR /
 COPY --from=builder /usr/local/bin/oc-go-switch /usr/local/bin/oc-go-switch
 EXPOSE 8180
 ENTRYPOINT ["oc-go-switch"]

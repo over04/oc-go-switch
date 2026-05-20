@@ -13,15 +13,16 @@ use crate::{
                 edit::AccountEditReqDto,
                 list::{AccountListEntryDto, AccountListRespDto},
             },
-            service::{account_entry, save_config},
+            service::account_entry,
         },
+        configuration::service::save_runtime_config,
         workspace::handle::KeyPoolHandle,
     },
     common::config::account::AccountConfig,
 };
 
 pub async fn list_accounts(State(handle): State<KeyPoolHandle>) -> Json<AccountListRespDto> {
-    let config = handle.config_snapshot();
+    let config = handle.runtime_config();
     let accounts: Vec<AccountListEntryDto> = config.accounts.iter().map(account_entry).collect();
     Json(AccountListRespDto { accounts })
 }
@@ -37,7 +38,7 @@ pub async fn add_account(
         return Err(StatusCode::BAD_REQUEST);
     }
 
-    let mut config = handle.config_snapshot().as_ref().clone();
+    let mut config = handle.runtime_config().as_ref().clone();
     if config
         .accounts
         .iter()
@@ -50,7 +51,7 @@ pub async fn add_account(
         auth: req.auth.clone(),
         label: req.label.clone(),
     });
-    save_config(&handle, config).await?;
+    save_runtime_config(&handle, config).await?;
     handle.request_refresh();
 
     info!("已添加账户 '{}'", req.name);
@@ -61,13 +62,13 @@ pub async fn delete_account(
     State(handle): State<KeyPoolHandle>,
     Path(name): Path<String>,
 ) -> Result<Json<AccountListRespDto>, StatusCode> {
-    let mut config = handle.config_snapshot().as_ref().clone();
+    let mut config = handle.runtime_config().as_ref().clone();
     let len_before = config.accounts.len();
     config.accounts.retain(|account| account.name != name);
     if config.accounts.len() == len_before {
         return Err(StatusCode::NOT_FOUND);
     }
-    save_config(&handle, config).await?;
+    save_runtime_config(&handle, config).await?;
     handle.request_refresh();
 
     info!("已删除账户 '{}'", name);
@@ -79,7 +80,7 @@ pub async fn edit_account(
     Path(name): Path<String>,
     Json(req): Json<AccountEditReqDto>,
 ) -> Result<Json<AccountListRespDto>, StatusCode> {
-    let mut config = handle.config_snapshot().as_ref().clone();
+    let mut config = handle.runtime_config().as_ref().clone();
     let account = config
         .accounts
         .iter_mut()
@@ -95,7 +96,7 @@ pub async fn edit_account(
             account.label = label.clone();
         }
     }
-    save_config(&handle, config).await?;
+    save_runtime_config(&handle, config).await?;
     handle.request_refresh();
 
     info!("已编辑账户 '{}'", name);

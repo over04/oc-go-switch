@@ -74,8 +74,11 @@ export interface ImageFilterConfig {
   models: ImageFilterModel[];
 }
 
-export interface ConfigResponse {
+export interface FixedConfigResponse {
   listen: string;
+}
+
+export interface RuntimeConfigResponse {
   refresh_interval_secs: number;
   max_retries: number;
   go: {
@@ -86,6 +89,11 @@ export interface ConfigResponse {
   accounts: AccountListEntry[];
   image_filter: ImageFilterConfig;
   api_token_set: boolean;
+}
+
+export interface ConfigResponse {
+  fixed: FixedConfigResponse;
+  runtime: RuntimeConfigResponse;
 }
 
 export interface ModelInfo {

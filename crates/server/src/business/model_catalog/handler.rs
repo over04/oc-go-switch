@@ -13,7 +13,7 @@ use crate::business::{
 };
 
 pub async fn list_models_v1(State(handle): State<KeyPoolHandle>) -> impl IntoResponse {
-    let base_url = handle.config_snapshot().go.base_url.clone();
+    let base_url = handle.runtime_config().go.base_url.clone();
 
     match fetch_model_list(&handle, &base_url).await {
         Ok(response) => (StatusCode::OK, Json(response)).into_response(),
@@ -28,7 +28,7 @@ pub async fn list_models_v1(State(handle): State<KeyPoolHandle>) -> impl IntoRes
 }
 
 pub async fn list_models(State(handle): State<KeyPoolHandle>) -> Json<MergedModelsResponse> {
-    let base_url = handle.config_snapshot().go.base_url.clone();
+    let base_url = handle.runtime_config().go.base_url.clone();
 
     let (openai, claude) = tokio::join!(
         fetch_model_list(&handle, &base_url),
@@ -42,12 +42,12 @@ pub async fn list_models(State(handle): State<KeyPoolHandle>) -> Json<MergedMode
 }
 
 pub async fn list_openai_models(State(handle): State<KeyPoolHandle>) -> Json<ModelListResult> {
-    let url = handle.config_snapshot().go.base_url.clone();
+    let url = handle.runtime_config().go.base_url.clone();
     Json(model_result(fetch_model_list(&handle, &url).await))
 }
 
 pub async fn list_claude_models(State(handle): State<KeyPoolHandle>) -> Json<ModelListResult> {
-    let url = handle.config_snapshot().go.base_url.clone();
+    let url = handle.runtime_config().go.base_url.clone();
     Json(model_result(fetch_model_list(&handle, &url).await))
 }
 

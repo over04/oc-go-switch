@@ -28,12 +28,12 @@ export function SettingsScreen() {
 
   useEffect(() => {
     if (data) {
-      setRefreshInterval(data.refresh_interval_secs);
-      setMaxRetries(data.max_retries);
-      setBaseUrl(data.go.base_url);
-      setConnectTimeout(data.go.connect_timeout_secs);
-      setRequestTimeout(data.go.request_timeout_secs);
-      setImageFilterModels(data.image_filter?.models ?? []);
+      setRefreshInterval(data.runtime.refresh_interval_secs);
+      setMaxRetries(data.runtime.max_retries);
+      setBaseUrl(data.runtime.go.base_url);
+      setConnectTimeout(data.runtime.go.connect_timeout_secs);
+      setRequestTimeout(data.runtime.go.request_timeout_secs);
+      setImageFilterModels(data.runtime.image_filter?.models ?? []);
     }
   }, [data]);
 
@@ -41,14 +41,16 @@ export function SettingsScreen() {
     setSaving(true);
     try {
       await updateConfig({
-        refresh_interval_secs: refreshInterval,
-        max_retries: maxRetries,
-        go: {
-          base_url: baseUrl,
-          connect_timeout_secs: connectTimeout,
-          request_timeout_secs: requestTimeout,
+        runtime: {
+          refresh_interval_secs: refreshInterval,
+          max_retries: maxRetries,
+          go: {
+            base_url: baseUrl,
+            connect_timeout_secs: connectTimeout,
+            request_timeout_secs: requestTimeout,
+          },
+          image_filter: { models: imageFilterModels },
         },
-        image_filter: { models: imageFilterModels },
       });
       queryClient.invalidateQueries({ queryKey: CONFIG_KEY });
       toastSuccess("配置已保存");
@@ -91,7 +93,7 @@ export function SettingsScreen() {
         </div>
         <div className="px-5 py-4">
           <GeneralForm
-            listen={data.listen}
+            listen={data.fixed.listen}
             refreshIntervalSecs={refreshInterval}
             maxRetries={maxRetries}
             baseUrl={baseUrl}
@@ -99,6 +101,7 @@ export function SettingsScreen() {
             requestTimeoutSecs={requestTimeout}
             onChangeRefreshInterval={setRefreshInterval}
             onChangeMaxRetries={setMaxRetries}
+            onChangeBaseUrl={setBaseUrl}
             onChangeConnectTimeout={setConnectTimeout}
             onChangeRequestTimeout={setRequestTimeout}
           />

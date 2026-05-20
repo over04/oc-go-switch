@@ -1,8 +1,5 @@
-use axum::http::StatusCode;
-
 use crate::{
-    business::{account::dto::list::AccountListEntryDto, workspace::handle::KeyPoolHandle},
-    common::config::{account::AccountConfig, Config},
+    business::account::dto::list::AccountListEntryDto, common::config::account::AccountConfig,
 };
 
 pub fn mask_auth(auth: &str) -> String {
@@ -18,11 +15,4 @@ pub fn account_entry(account: &AccountConfig) -> AccountListEntryDto {
         label: account.label.clone(),
         auth_masked: mask_auth(&account.auth),
     }
-}
-
-pub async fn save_config(handle: &KeyPoolHandle, config: Config) -> Result<(), StatusCode> {
-    handle.save_config_snapshot(config).await.map_err(|error| {
-        tracing::error!("保存配置失败: {error}");
-        StatusCode::INTERNAL_SERVER_ERROR
-    })
 }

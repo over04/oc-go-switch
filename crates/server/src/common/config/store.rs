@@ -15,6 +15,8 @@ pub enum ConfigStoreError {
     Serialize(#[source] serde_yaml::Error),
     #[error("打开配置文件失败: {0}")]
     Open(#[source] std::io::Error),
+    #[error("提交配置文件失败: {0}")]
+    Commit(#[source] std::io::Error),
     #[error("写入配置文件失败: {0}")]
     Write(#[source] std::io::Error),
     #[error("刷新配置文件失败: {0}")]
@@ -45,11 +47,12 @@ impl ConfigStore {
     pub async fn save(&self, config: &Config) -> Result<(), ConfigStoreError> {
         config.validate().map_err(ConfigStoreError::Parse)?;
         let yaml = serde_yaml::to_string(config).map_err(ConfigStoreError::Serialize)?;
+        let tmp_path = self.path.with_extension("yaml.tmp");
         let mut file = tokio::fs::OpenOptions::new()
             .create(true)
             .write(true)
             .truncate(true)
-            .open(self.path.as_ref())
+            .open(&tmp_path)
             .await
             .map_err(ConfigStoreError::Open)?;
         file.write_all(yaml.as_bytes())
@@ -57,6 +60,10 @@ impl ConfigStore {
             .map_err(ConfigStoreError::Write)?;
         file.flush().await.map_err(ConfigStoreError::Flush)?;
         file.sync_data().await.map_err(ConfigStoreError::Sync)?;
+        drop(file);
+        tokio::fs::rename(&tmp_path, self.path.as_ref())
+            .await
+            .map_err(ConfigStoreError::Commit)?;
         Ok(())
     }
 }

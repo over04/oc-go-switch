@@ -1,3 +1,4 @@
+pub mod client_set;
 pub mod discovery;
 pub mod error;
 pub mod handle;
