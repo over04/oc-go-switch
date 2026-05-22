@@ -36,6 +36,7 @@ pub enum OpenAiChatMessage {
     },
     #[serde(rename = "tool")]
     Tool {
+        #[serde(deserialize_with = "crate::openai::model::stringified_json::deserialize")]
         content: String,
         tool_call_id: String,
         #[serde(flatten)]

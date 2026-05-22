@@ -54,6 +54,47 @@ fn tool_message_with_content() -> Result<(), Box<dyn std::error::Error>> {
 }
 
 #[test]
+fn tool_message_with_array_content_is_stringified() -> Result<(), Box<dyn std::error::Error>> {
+    let json = r#"{
+        "model": "gpt-4",
+        "messages": [
+            {"role": "assistant", "content": null, "tool_calls": [{"id": "1", "type": "function", "function": {"name": "read", "arguments": {"file_path": "/tmp/a.png"}}}]},
+            {"role": "tool", "content": [{"type": "image_url", "image_url": {"url": "data:image/png;base64,AA=="}}], "tool_call_id": "1"}
+        ]
+    }"#;
+    let req: OpenAiChatCompletionRequest = serde_json::from_str(json)?;
+    let OpenAiChatMessage::Assistant {
+        tool_calls: Some(tool_calls),
+        ..
+    } = &req.messages[0]
+    else {
+        return Err("expected assistant message".into());
+    };
+    assert_eq!(
+        tool_calls[0].function.arguments,
+        r#"{"file_path":"/tmp/a.png"}"#
+    );
+
+    let OpenAiChatMessage::Tool { content, .. } = &req.messages[1] else {
+        return Err("expected tool message".into());
+    };
+    assert_eq!(
+        serde_json::from_str::<serde_json::Value>(content)?,
+        serde_json::json!([
+            {"type": "image_url", "image_url": {"url": "data:image/png;base64,AA=="}}
+        ])
+    );
+
+    let out = serde_json::to_value(&req)?;
+    assert_eq!(out["messages"][1]["content"], *content);
+    assert_eq!(
+        out["messages"][0]["tool_calls"][0]["function"]["arguments"],
+        tool_calls[0].function.arguments
+    );
+    Ok(())
+}
+
+#[test]
 fn content_array() -> Result<(), Box<dyn std::error::Error>> {
     let json = r#"{
         "model": "gpt-4",

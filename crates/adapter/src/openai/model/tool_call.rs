@@ -23,6 +23,7 @@ pub enum OpenAiMessageToolCallType {
 
 #[derive(Debug, Clone, PartialEq, Deserialize, Serialize)]
 pub struct OpenAiMessageToolCallFunction {
+    #[serde(deserialize_with = "crate::openai::model::stringified_json::deserialize")]
     pub arguments: String,
     pub name: String,
 }

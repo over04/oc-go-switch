@@ -6,4 +6,5 @@ pub mod image_url;
 pub mod input_audio;
 pub mod message;
 pub mod part;
+pub mod stringified_json;
 pub mod tool_call;
