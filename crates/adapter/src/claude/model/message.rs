@@ -1,9 +1,12 @@
 use serde::{Deserialize, Serialize};
 
-use crate::claude::model::{content::AnthropicContent, role::AnthropicRole};
+use crate::claude::model::content::{AnthropicAssistantContent, AnthropicUserContent};
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
-pub struct AnthropicMessage {
-    pub role: AnthropicRole,
-    pub content: AnthropicContent,
+#[serde(tag = "role")]
+pub enum AnthropicMessage {
+    #[serde(rename = "user")]
+    User { content: AnthropicUserContent },
+    #[serde(rename = "assistant")]
+    Assistant { content: AnthropicAssistantContent },
 }

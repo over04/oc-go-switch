@@ -19,3 +19,6 @@ thiserror.workspace = true
 chrono.workspace = true
 adapter.workspace = true
 arc-swap.workspace = true
+
+[dev-dependencies]
+tower = "0.5"

@@ -11,7 +11,11 @@ use crate::{
 };
 use adapter::claude::model::messages_request::AnthropicMessagesRequest;
 
-pub async fn messages(State(handle): State<KeyPoolHandle>, body: Bytes) -> Response {
+pub async fn messages(
+    State(handle): State<KeyPoolHandle>,
+    headers: axum::http::HeaderMap,
+    body: Bytes,
+) -> Response {
     let start = std::time::Instant::now();
 
     let mut req: AnthropicMessagesRequest = match serde_json::from_slice(&body) {
@@ -91,6 +95,7 @@ pub async fn messages(State(handle): State<KeyPoolHandle>, body: Bytes) -> Respo
         let resp = clients
             .proxy
             .post(&upstream_url)
+            .headers(upstream_headers(&headers))
             .header("x-api-key", &key.key_value)
             .header("anthropic-version", "2023-06-01")
             .header(reqwest::header::CONTENT_TYPE, "application/json")
@@ -193,4 +198,21 @@ pub async fn messages(State(handle): State<KeyPoolHandle>, body: Bytes) -> Respo
         "重试耗尽，所有 API key 不可用",
         "server_error",
     )
+}
+
+fn upstream_headers(headers: &axum::http::HeaderMap) -> reqwest::header::HeaderMap {
+    let mut upstream = reqwest::header::HeaderMap::new();
+    for (name, value) in headers {
+        if name == axum::http::header::AUTHORIZATION
+            || name == "x-api-key"
+            || name == axum::http::header::HOST
+            || name == axum::http::header::CONTENT_LENGTH
+            || name == axum::http::header::CONTENT_TYPE
+        {
+            continue;
+        }
+
+        upstream.insert(name.clone(), value.clone());
+    }
+    upstream
 }

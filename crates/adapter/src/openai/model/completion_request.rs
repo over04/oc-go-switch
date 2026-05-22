@@ -13,6 +13,7 @@ pub struct OpenAiChatCompletionRequest {
     pub model: String,
     pub messages: Vec<OpenAiChatMessage>,
     #[serde(default)]
+    #[serde(skip_serializing_if = "std::ops::Not::not")]
     pub stream: bool,
     #[serde(flatten)]
     pub extra: HashMap<String, Value>,

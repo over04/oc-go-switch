@@ -1,13 +1,13 @@
 use crate::claude::model::{
-    content::AnthropicContent, messages_request::AnthropicMessagesRequest, role::AnthropicRole,
-    system::AnthropicSystemContent,
+    block::AnthropicContentBlock, message::AnthropicMessage,
+    messages_request::AnthropicMessagesRequest,
 };
 
 #[test]
 fn omit_max_tokens_extended_thinking() -> Result<(), Box<dyn std::error::Error>> {
     let json = r#"{
         "model": "claude-sonnet-4-6",
-        "messages": [{"role": "user", "content": "hello"}]
+        "messages": [{"role": "user", "content": [{"type": "text", "text": "hello"}]}]
     }"#;
     let req: AnthropicMessagesRequest = serde_json::from_str(json)?;
     assert_eq!(req.max_tokens, None);
@@ -21,7 +21,7 @@ fn with_max_tokens() -> Result<(), Box<dyn std::error::Error>> {
     let json = r#"{
         "model": "claude-sonnet-4-6",
         "max_tokens": 1024,
-        "messages": [{"role": "user", "content": "hello"}]
+        "messages": [{"role": "user", "content": [{"type": "text", "text": "hello"}]}]
     }"#;
     let req: AnthropicMessagesRequest = serde_json::from_str(json)?;
     assert_eq!(req.max_tokens, Some(1024));
@@ -31,14 +31,20 @@ fn with_max_tokens() -> Result<(), Box<dyn std::error::Error>> {
 }
 
 #[test]
-fn content_text_string() -> Result<(), Box<dyn std::error::Error>> {
+fn content_text_block() -> Result<(), Box<dyn std::error::Error>> {
     let json = r#"{
         "model": "claude-sonnet-4-6",
         "max_tokens": 100,
-        "messages": [{"role": "user", "content": "simple text"}]
+        "messages": [{"role": "user", "content": [{"type": "text", "text": "simple text"}]}]
     }"#;
     let req: AnthropicMessagesRequest = serde_json::from_str(json)?;
-    assert!(matches!(req.messages[0].content, AnthropicContent::Text(_)));
+    let AnthropicMessage::User { content } = &req.messages[0] else {
+        panic!("expected user message");
+    };
+    assert!(matches!(
+        content.blocks[0],
+        AnthropicContentBlock::Text { .. }
+    ));
     Ok(())
 }
 
@@ -53,9 +59,12 @@ fn content_blocks_with_tool_use() -> Result<(), Box<dyn std::error::Error>> {
         }]
     }"#;
     let req: AnthropicMessagesRequest = serde_json::from_str(json)?;
+    let AnthropicMessage::Assistant { content } = &req.messages[0] else {
+        panic!("expected assistant message");
+    };
     assert!(matches!(
-        req.messages[0].content,
-        AnthropicContent::Blocks(_)
+        content.blocks[1],
+        AnthropicContentBlock::ToolUse { .. }
     ));
     let out = serde_json::to_string(&req)?;
     assert!(out.contains("tool_use"));
@@ -63,72 +72,15 @@ fn content_blocks_with_tool_use() -> Result<(), Box<dyn std::error::Error>> {
 }
 
 #[test]
-fn system_as_string() -> Result<(), Box<dyn std::error::Error>> {
+fn system_as_text_blocks() -> Result<(), Box<dyn std::error::Error>> {
     let json = r#"{
         "model": "claude-sonnet-4-6",
         "max_tokens": 100,
-        "messages": [{"role": "user", "content": "hi"}],
-        "system": "You are helpful."
-    }"#;
-    let req: AnthropicMessagesRequest = serde_json::from_str(json)?;
-    assert!(matches!(req.system, Some(AnthropicSystemContent::Text(_))));
-    Ok(())
-}
-
-#[test]
-fn system_as_blocks() -> Result<(), Box<dyn std::error::Error>> {
-    let json = r#"{
-        "model": "claude-sonnet-4-6",
-        "max_tokens": 100,
-        "messages": [{"role": "user", "content": "hi"}],
+        "messages": [{"role": "user", "content": [{"type": "text", "text": "hi"}]}],
         "system": [{"type": "text", "text": "You are helpful."}]
     }"#;
     let req: AnthropicMessagesRequest = serde_json::from_str(json)?;
-    assert!(matches!(
-        req.system,
-        Some(AnthropicSystemContent::Blocks(_))
-    ));
-    Ok(())
-}
-
-#[test]
-fn unknown_role_falls_back() -> Result<(), Box<dyn std::error::Error>> {
-    let json = r#"{
-        "model": "claude-sonnet-4-6",
-        "max_tokens": 100,
-        "messages": [{"role": "future_role", "content": "test"}]
-    }"#;
-    let req: AnthropicMessagesRequest = serde_json::from_str(json)?;
-    assert_eq!(req.messages[0].role, AnthropicRole::Unknown);
-    Ok(())
-}
-
-#[test]
-fn unknown_system_block_kind_falls_back() -> Result<(), Box<dyn std::error::Error>> {
-    let json = r#"{
-        "model": "claude-sonnet-4-6",
-        "max_tokens": 100,
-        "messages": [{"role": "user", "content": "hi"}],
-        "system": [{"type": "future_block", "text": "test"}]
-    }"#;
-    let req: AnthropicMessagesRequest = serde_json::from_str(json)?;
-    assert!(matches!(
-        req.system,
-        Some(AnthropicSystemContent::Blocks(_))
-    ));
-    Ok(())
-}
-
-#[test]
-fn unknown_image_source_type() -> Result<(), Box<dyn std::error::Error>> {
-    let json = r#"{
-        "model": "claude-sonnet-4-6",
-        "max_tokens": 100,
-        "messages": [{"role": "user", "content": [{"type": "image", "source": {"type": "s3", "bucket": "x", "key": "y"}}]}]
-    }"#;
-    let req: AnthropicMessagesRequest = serde_json::from_str(json)?;
-    let out = serde_json::to_string(&req)?;
-    assert!(out.contains("s3"));
+    assert!(req.system.is_some());
     Ok(())
 }
 
@@ -147,10 +99,119 @@ fn content_block_cache_control_passthrough() -> Result<(), Box<dyn std::error::E
 
 #[test]
 fn roundtrip_extra_fields() -> Result<(), Box<dyn std::error::Error>> {
-    let json = r#"{"model": "claude-sonnet-4-6", "max_tokens": 100, "messages": [{"role": "user", "content": "hi"}], "temperature": 0.7, "thinking": {"type": "enabled", "budget_tokens": 500}}"#;
+    let json = r#"{"model": "claude-sonnet-4-6", "max_tokens": 100, "messages": [{"role": "user", "content": [{"type": "text", "text": "hi"}]}], "temperature": 0.7, "thinking": {"type": "enabled", "budget_tokens": 500}}"#;
     let req: AnthropicMessagesRequest = serde_json::from_str(json)?;
     let out = serde_json::to_string(&req)?;
     assert!(out.contains("temperature"));
     assert!(out.contains("thinking"));
+    Ok(())
+}
+
+#[test]
+fn mcp_server_nullish_fields_match_ai_sdk() -> Result<(), Box<dyn std::error::Error>> {
+    let json = r#"{
+        "model": "claude-sonnet-4-6",
+        "max_tokens": 100,
+        "messages": [{"role": "user", "content": [{"type": "text", "text": "hi"}]}],
+        "mcp_servers": [{
+            "type": "url",
+            "name": "docs",
+            "url": "https://example.com/mcp",
+            "authorization_token": null,
+            "tool_configuration": {
+                "allowed_tools": null,
+                "enabled": null
+            }
+        }]
+    }"#;
+    let req: AnthropicMessagesRequest = serde_json::from_str(json)?;
+    let out = serde_json::to_string(&req)?;
+    assert!(out.contains(r#""authorization_token":null"#));
+    assert!(out.contains(r#""allowed_tools":null"#));
+    assert!(out.contains(r#""enabled":null"#));
+    Ok(())
+}
+
+#[test]
+fn ai_sdk_anthropic_content_blocks_roundtrip() -> Result<(), Box<dyn std::error::Error>> {
+    let json = r#"{
+        "model": "claude-sonnet-4-6",
+        "max_tokens": 100,
+        "system": [{"type": "text", "text": "You are helpful.", "cache_control": {"type": "ephemeral"}}],
+        "messages": [
+            {
+                "role": "user",
+                "content": [
+                    {"type": "document", "source": {"type": "text", "media_type": "text/plain", "data": "doc"}, "title": "doc.txt", "citations": {"enabled": true}},
+                    {"type": "tool_result", "tool_use_id": "toolu_1", "content": [{"type": "text", "text": "result"}]}
+                ]
+            },
+            {
+                "role": "assistant",
+                "content": [
+                    {"type": "thinking", "thinking": "internal", "signature": "sig"},
+                    {"type": "server_tool_use", "id": "srvu_1", "name": "web_search", "input": {"query": "rust"}},
+                    {"type": "tool_use", "id": "toolu_1", "name": "lookup", "input": {"q": "rust"}, "caller": {"type": "direct"}}
+                ]
+            }
+        ],
+        "thinking": {"type": "enabled", "budget_tokens": 500},
+        "context_management": {"edits": [{"type": "clear_thinking_20251015"}]}
+    }"#;
+    let req: AnthropicMessagesRequest = serde_json::from_str(json)?;
+    let AnthropicMessage::User {
+        content: user_content,
+    } = &req.messages[0]
+    else {
+        panic!("expected user message");
+    };
+    let user_blocks = &user_content.blocks;
+    assert!(matches!(
+        user_blocks[0],
+        AnthropicContentBlock::Document { .. }
+    ));
+    assert!(matches!(
+        user_blocks[1],
+        AnthropicContentBlock::ToolResult { .. }
+    ));
+    let AnthropicMessage::Assistant {
+        content: assistant_content,
+    } = &req.messages[1]
+    else {
+        panic!("expected assistant message");
+    };
+    let assistant_blocks = &assistant_content.blocks;
+    assert!(matches!(
+        assistant_blocks[0],
+        AnthropicContentBlock::Thinking { .. }
+    ));
+    assert!(matches!(
+        assistant_blocks[1],
+        AnthropicContentBlock::ServerToolUse { .. }
+    ));
+    assert!(matches!(
+        assistant_blocks[2],
+        AnthropicContentBlock::ToolUse { .. }
+    ));
+    let out = serde_json::to_string(&req)?;
+    assert!(out.contains("document"));
+    assert!(out.contains("tool_result"));
+    assert!(out.contains("server_tool_use"));
+    assert!(out.contains("thinking"));
+    assert!(out.contains("context_management"));
+    assert!(out.contains(r#""caller":{"type":"direct"}"#));
+    Ok(())
+}
+
+#[test]
+fn false_stream_is_omitted_like_ai_sdk() -> Result<(), Box<dyn std::error::Error>> {
+    let json = r#"{
+        "model": "claude-sonnet-4-6",
+        "max_tokens": 100,
+        "messages": [{"role": "user", "content": [{"type": "text", "text": "hi"}]}]
+    }"#;
+    let req: AnthropicMessagesRequest = serde_json::from_str(json)?;
+    let out = serde_json::to_string(&req)?;
+    assert!(!out.contains("stream"));
     Ok(())
 }

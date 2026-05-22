@@ -1,6 +1,6 @@
 use crate::openai::model::{
-    completion_request::OpenAiChatCompletionRequest, content::OpenAiChatContent,
-    role::OpenAiChatRole,
+    assistant_content::OpenAiAssistantContent, completion_request::OpenAiChatCompletionRequest,
+    content::OpenAiChatContent, message::OpenAiChatMessage, part::OpenAiContentPart,
 };
 
 #[test]
@@ -13,9 +13,18 @@ fn assistant_with_null_content_and_tool_calls() -> Result<(), Box<dyn std::error
         ]
     }"#;
     let req: OpenAiChatCompletionRequest = serde_json::from_str(json)?;
-    assert_eq!(req.messages[1].content, None);
-    assert!(req.messages[1].extra.contains_key("tool_calls"));
+    let OpenAiChatMessage::Assistant {
+        content,
+        tool_calls,
+        ..
+    } = &req.messages[1]
+    else {
+        return Err("expected assistant message".into());
+    };
+    assert_eq!(content, &OpenAiAssistantContent::Null);
+    assert_eq!(tool_calls.as_ref().map(Vec::len), Some(1));
     let out = serde_json::to_string(&req)?;
+    assert!(out.contains(r#""content":null"#));
     assert!(out.contains("tool_calls"));
     Ok(())
 }
@@ -31,34 +40,16 @@ fn tool_message_with_content() -> Result<(), Box<dyn std::error::Error>> {
         ]
     }"#;
     let req: OpenAiChatCompletionRequest = serde_json::from_str(json)?;
-    assert_eq!(
-        req.messages[2].content,
-        Some(OpenAiChatContent::Text("result".into()))
-    );
-    assert_eq!(
-        req.messages[2]
-            .extra
-            .get("tool_call_id")
-            .ok_or("missing tool_call_id")?,
-        "1"
-    );
-    Ok(())
-}
-
-#[test]
-fn developer_role() -> Result<(), Box<dyn std::error::Error>> {
-    let json =
-        r#"{"model": "gpt-4", "messages": [{"role": "developer", "content": "You are helpful."}]}"#;
-    let req: OpenAiChatCompletionRequest = serde_json::from_str(json)?;
-    assert_eq!(req.messages[0].role, OpenAiChatRole::Developer);
-    Ok(())
-}
-
-#[test]
-fn unknown_role_falls_back() -> Result<(), Box<dyn std::error::Error>> {
-    let json = r#"{"model": "gpt-4", "messages": [{"role": "future_role", "content": "test"}]}"#;
-    let req: OpenAiChatCompletionRequest = serde_json::from_str(json)?;
-    assert_eq!(req.messages[0].role, OpenAiChatRole::Unknown);
+    let OpenAiChatMessage::Tool {
+        content,
+        tool_call_id,
+        ..
+    } = &req.messages[2]
+    else {
+        return Err("expected tool message".into());
+    };
+    assert_eq!(content, "result");
+    assert_eq!(tool_call_id, "1");
     Ok(())
 }
 
@@ -70,8 +61,11 @@ fn content_array() -> Result<(), Box<dyn std::error::Error>> {
     }"#;
     let req: OpenAiChatCompletionRequest = serde_json::from_str(json)?;
     assert!(matches!(
-        req.messages[0].content,
-        Some(OpenAiChatContent::Parts(_))
+        req.messages[0],
+        OpenAiChatMessage::User {
+            content: OpenAiChatContent::Parts(_),
+            ..
+        }
     ));
     Ok(())
 }
@@ -80,10 +74,13 @@ fn content_array() -> Result<(), Box<dyn std::error::Error>> {
 fn content_text_string() -> Result<(), Box<dyn std::error::Error>> {
     let json = r#"{"model": "gpt-4", "messages": [{"role": "user", "content": "simple text"}]}"#;
     let req: OpenAiChatCompletionRequest = serde_json::from_str(json)?;
-    assert_eq!(
-        req.messages[0].content,
-        Some(OpenAiChatContent::Text("simple text".into()))
-    );
+    assert!(matches!(
+        &req.messages[0],
+        OpenAiChatMessage::User {
+            content: OpenAiChatContent::Text(text),
+            ..
+        } if text == "simple text"
+    ));
     Ok(())
 }
 
@@ -94,5 +91,43 @@ fn roundtrip_preserves_extra_fields() -> Result<(), Box<dyn std::error::Error>> 
     let out = serde_json::to_string(&req)?;
     assert!(out.contains("temperature"));
     assert!(out.contains("top_p"));
+    Ok(())
+}
+
+#[test]
+fn ai_sdk_openai_compatible_content_parts_roundtrip() -> Result<(), Box<dyn std::error::Error>> {
+    let json = r#"{
+        "model": "gpt-4",
+        "messages": [{
+            "role": "user",
+            "content": [
+                {"type": "text", "text": "hello"},
+                {"type": "input_audio", "input_audio": {"data": "UklGRg==", "format": "wav"}},
+                {"type": "file", "file": {"filename": "document.pdf", "file_data": "data:application/pdf;base64,JVBERi0x"}}
+            ]
+        }]
+    }"#;
+    let req: OpenAiChatCompletionRequest = serde_json::from_str(json)?;
+    let OpenAiChatMessage::User {
+        content: OpenAiChatContent::Parts(parts),
+        ..
+    } = &req.messages[0]
+    else {
+        return Err("expected parts".into());
+    };
+    assert!(matches!(parts[1], OpenAiContentPart::InputAudio { .. }));
+    assert!(matches!(parts[2], OpenAiContentPart::File { .. }));
+    let out = serde_json::to_string(&req)?;
+    assert!(out.contains("input_audio"));
+    assert!(out.contains("file_data"));
+    Ok(())
+}
+
+#[test]
+fn false_stream_is_omitted_like_ai_sdk() -> Result<(), Box<dyn std::error::Error>> {
+    let json = r#"{"model": "gpt-4", "messages": [{"role": "user", "content": "hi"}]}"#;
+    let req: OpenAiChatCompletionRequest = serde_json::from_str(json)?;
+    let out = serde_json::to_string(&req)?;
+    assert!(!out.contains("stream"));
     Ok(())
 }

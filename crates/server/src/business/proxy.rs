@@ -6,3 +6,6 @@ pub mod quota;
 pub mod response;
 pub mod router;
 pub mod stream;
+
+#[cfg(test)]
+mod tests;

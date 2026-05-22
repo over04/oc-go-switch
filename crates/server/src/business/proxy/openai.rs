@@ -13,7 +13,7 @@ use adapter::openai::model::completion_request::OpenAiChatCompletionRequest;
 
 pub async fn chat_completions(
     State(handle): State<KeyPoolHandle>,
-    _headers: axum::http::HeaderMap,
+    headers: axum::http::HeaderMap,
     body: Bytes,
 ) -> Response {
     let start = std::time::Instant::now();
@@ -88,13 +88,7 @@ pub async fn chat_completions(
 
         let upstream_url = format!("{base_url}/chat/completions");
 
-        let mut upstream_value = serde_json::to_value(&req)
-            .map_err(|e| {
-                tracing::error!("序列化请求失败: {e}");
-            })
-            .unwrap_or_default();
-        upstream_value["api_key"] = serde_json::Value::String(key.key_value.clone());
-        let upstream_bytes = match serde_json::to_vec(&upstream_value) {
+        let upstream_bytes = match serde_json::to_vec(&req) {
             Ok(b) => b,
             Err(e) => {
                 tracing::error!("序列化上游请求失败: {e}");
@@ -111,6 +105,7 @@ pub async fn chat_completions(
         let resp = clients
             .proxy
             .post(&upstream_url)
+            .headers(upstream_headers(&headers))
             .header(
                 reqwest::header::AUTHORIZATION,
                 format!("Bearer {}", key.key_value),
@@ -217,4 +212,20 @@ pub async fn chat_completions(
         None,
         None,
     )
+}
+
+fn upstream_headers(headers: &axum::http::HeaderMap) -> reqwest::header::HeaderMap {
+    let mut upstream = reqwest::header::HeaderMap::new();
+    for (name, value) in headers {
+        if name == axum::http::header::AUTHORIZATION
+            || name == axum::http::header::HOST
+            || name == axum::http::header::CONTENT_LENGTH
+            || name == axum::http::header::CONTENT_TYPE
+        {
+            continue;
+        }
+
+        upstream.insert(name.clone(), value.clone());
+    }
+    upstream
 }

@@ -1,7 +1,9 @@
+pub mod assistant_content;
 pub mod completion_request;
 pub mod content;
-pub mod image_detail;
+pub mod file;
 pub mod image_url;
+pub mod input_audio;
 pub mod message;
 pub mod part;
-pub mod role;
+pub mod tool_call;

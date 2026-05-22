@@ -1,24 +1,17 @@
-use std::collections::HashMap;
-
 use serde::{Deserialize, Serialize};
-use serde_json::Value;
+
+use crate::claude::model::text_source_media_type::AnthropicTextSourceMediaType;
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
 #[serde(tag = "type")]
 pub enum AnthropicImageSource {
     #[serde(rename = "base64")]
-    Base64 {
-        media_type: String,
-        data: String,
-        #[serde(flatten)]
-        extra: HashMap<String, Value>,
-    },
+    Base64 { media_type: String, data: String },
     #[serde(rename = "url")]
-    Url {
-        url: String,
-        #[serde(flatten)]
-        extra: HashMap<String, Value>,
+    Url { url: String },
+    #[serde(rename = "text")]
+    Text {
+        media_type: AnthropicTextSourceMediaType,
+        data: String,
     },
-    #[serde(untagged)]
-    Other(Value),
 }
