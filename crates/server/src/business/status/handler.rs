@@ -5,8 +5,10 @@ use crate::business::{
         dto::{
             account::AccountStatus,
             active_key::{ActiveKeyActionResponse, SetActiveKeyRequest},
-            dashboard::DashboardStatusResponse, key::KeyStatusEntry,
-            schedule::WorkspaceScheduleResponse, workspace::WorkspaceStatus,
+            dashboard::DashboardStatusResponse,
+            key::KeyStatusEntry,
+            schedule::WorkspaceScheduleResponse,
+            workspace::WorkspaceStatus,
             workspace_queue_status::WorkspaceQueueStatus,
         },
         service::refresh_workspace_pool,

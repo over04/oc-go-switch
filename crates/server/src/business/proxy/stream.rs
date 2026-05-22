@@ -22,8 +22,8 @@ fn build_response(
     })
 }
 
-/// 转发非流式 JSON 响应。
-pub(crate) async fn forward_json_response(upstream: reqwest::Response) -> Response {
+/// 将上游非流式响应封装为本服务的 JSON 响应。
+pub(crate) async fn json_response_from_upstream(upstream: reqwest::Response) -> Response {
     let status = upstream.status();
     let body = upstream.text().await.unwrap_or_default();
     build_response(
@@ -33,8 +33,8 @@ pub(crate) async fn forward_json_response(upstream: reqwest::Response) -> Respon
     )
 }
 
-/// 原样转发 SSE 流。
-pub(crate) fn forward_sse_stream(upstream: reqwest::Response) -> Response {
+/// 将上游 SSE 数据封装为本服务的事件流响应。
+pub(crate) fn sse_response_from_upstream(upstream: reqwest::Response) -> Response {
     let status = upstream.status();
     let stream = upstream
         .bytes_stream()

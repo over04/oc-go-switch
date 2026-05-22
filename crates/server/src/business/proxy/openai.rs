@@ -11,11 +11,7 @@ use crate::{
 };
 use adapter::openai::model::completion_request::OpenAiChatCompletionRequest;
 
-pub async fn chat_completions(
-    State(handle): State<KeyPoolHandle>,
-    headers: axum::http::HeaderMap,
-    body: Bytes,
-) -> Response {
+pub async fn chat_completions(State(handle): State<KeyPoolHandle>, body: Bytes) -> Response {
     let start = std::time::Instant::now();
 
     let mut req: OpenAiChatCompletionRequest = match serde_json::from_slice(&body) {
@@ -105,7 +101,7 @@ pub async fn chat_completions(
         let resp = clients
             .proxy
             .post(&upstream_url)
-            .headers(upstream_headers(&headers))
+            .header(reqwest::header::ACCEPT_ENCODING, "identity")
             .header(
                 reqwest::header::AUTHORIZATION,
                 format!("Bearer {}", key.key_value),
@@ -136,9 +132,9 @@ pub async fn chat_completions(
                         .await;
 
                     if is_stream {
-                        return stream::forward_sse_stream(r);
+                        return stream::sse_response_from_upstream(r);
                     }
-                    return stream::forward_json_response(r).await;
+                    return stream::json_response_from_upstream(r).await;
                 }
 
                 let resp_body = r.text().await.unwrap_or_default();
@@ -212,20 +208,4 @@ pub async fn chat_completions(
         None,
         None,
     )
-}
-
-fn upstream_headers(headers: &axum::http::HeaderMap) -> reqwest::header::HeaderMap {
-    let mut upstream = reqwest::header::HeaderMap::new();
-    for (name, value) in headers {
-        if name == axum::http::header::AUTHORIZATION
-            || name == axum::http::header::HOST
-            || name == axum::http::header::CONTENT_LENGTH
-            || name == axum::http::header::CONTENT_TYPE
-        {
-            continue;
-        }
-
-        upstream.insert(name.clone(), value.clone());
-    }
-    upstream
 }

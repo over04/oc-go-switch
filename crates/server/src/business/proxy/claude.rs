@@ -92,16 +92,16 @@ pub async fn messages(
             _attempt + 1,
         );
 
-        let resp = clients
+        let request = clients
             .proxy
             .post(&upstream_url)
-            .headers(upstream_headers(&headers))
+            .header(reqwest::header::ACCEPT_ENCODING, "identity")
             .header("x-api-key", &key.key_value)
             .header("anthropic-version", "2023-06-01")
             .header(reqwest::header::CONTENT_TYPE, "application/json")
-            .body(upstream_bytes.clone())
-            .send()
-            .await;
+            .body(upstream_bytes.clone());
+
+        let resp = apply_anthropic_beta(request, &headers).send().await;
 
         match resp {
             Ok(r) => {
@@ -124,9 +124,9 @@ pub async fn messages(
                         .await;
 
                     if is_stream {
-                        return stream::forward_sse_stream(r);
+                        return stream::sse_response_from_upstream(r);
                     }
-                    return stream::forward_json_response(r).await;
+                    return stream::json_response_from_upstream(r).await;
                 }
 
                 let resp_body = r.text().await.unwrap_or_default();
@@ -200,19 +200,12 @@ pub async fn messages(
     )
 }
 
-fn upstream_headers(headers: &axum::http::HeaderMap) -> reqwest::header::HeaderMap {
-    let mut upstream = reqwest::header::HeaderMap::new();
-    for (name, value) in headers {
-        if name == axum::http::header::AUTHORIZATION
-            || name == "x-api-key"
-            || name == axum::http::header::HOST
-            || name == axum::http::header::CONTENT_LENGTH
-            || name == axum::http::header::CONTENT_TYPE
-        {
-            continue;
-        }
-
-        upstream.insert(name.clone(), value.clone());
+fn apply_anthropic_beta(
+    request: reqwest::RequestBuilder,
+    headers: &axum::http::HeaderMap,
+) -> reqwest::RequestBuilder {
+    match headers.get("anthropic-beta") {
+        Some(value) => request.header("anthropic-beta", value.clone()),
+        None => request,
     }
-    upstream
 }
