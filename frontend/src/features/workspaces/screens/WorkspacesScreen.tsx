@@ -5,33 +5,32 @@ import {
   useWorkspaceSchedule,
   WORKSPACE_SCHEDULE_KEY,
 } from "@/features/workspaces/logic/useWorkspaceSchedule";
-import { ActiveKeyBar } from "../components/ActiveKeyBar";
-import { KeyCardGrid } from "../components/KeyCardGrid";
-import { KeyFilterBar } from "../components/KeyFilterBar";
+import { AffinityWorkspaceBar } from "../components/AffinityWorkspaceBar";
+import { WorkspaceScheduleGrid } from "../components/WorkspaceScheduleGrid";
+import { WorkspaceFilterBar } from "../components/WorkspaceFilterBar";
 import { Skeleton } from "@/shared/ui/Skeleton";
 import { Button } from "@/shared/ui/Button";
 import {
-  setActiveKey,
-  clearActiveKey,
+  setAffinityWorkspace,
+  clearAffinityWorkspace,
   refreshWorkspaces,
 } from "@/features/settings/service/settingsService";
 import { toastSuccess, toastError } from "@/shared/lib/toast";
-import type { KeyStatus, WorkspaceStatusKind } from "@/shared/types/api";
+import type { WorkspaceStatusKind } from "@/shared/types/api";
 
 export function WorkspacesScreen() {
   const queryClient = useQueryClient();
   const { data, isPending, isError } = useWorkspaceSchedule();
   const [refreshing, setRefreshing] = useState(false);
   const [search, setSearch] = useState("");
-  const [statusFilter, setStatusFilter] = useState<KeyStatus | "all">("all");
   const [workspaceFilter, setWorkspaceFilter] = useState<WorkspaceStatusKind | "all">("all");
 
-  const handleSetActive = useCallback(
-    async (keyId: string) => {
+  const handleSetAffinity = useCallback(
+    async (workspaceId: string) => {
       try {
-        await setActiveKey(keyId);
+        await setAffinityWorkspace(workspaceId);
         await queryClient.invalidateQueries({ queryKey: WORKSPACE_SCHEDULE_KEY });
-        toastSuccess("已切换当前调度 Key");
+        toastSuccess("已设置亲和工作区");
       } catch (e) {
         toastError(e instanceof Error ? e.message : "切换失败");
       }
@@ -39,11 +38,11 @@ export function WorkspacesScreen() {
     [queryClient],
   );
 
-  const handleClearActive = useCallback(async () => {
+  const handleClearAffinity = useCallback(async () => {
     try {
-      await clearActiveKey();
+      await clearAffinityWorkspace();
       await queryClient.invalidateQueries({ queryKey: WORKSPACE_SCHEDULE_KEY });
-      toastSuccess("已清除当前调度 Key");
+      toastSuccess("已清除亲和工作区");
     } catch (e) {
       toastError(e instanceof Error ? e.message : "操作失败");
     }
@@ -77,11 +76,11 @@ export function WorkspacesScreen() {
     );
 
   const goAccounts = data.accounts.filter((a) => a.workspaces.length > 0);
-
-  const totalKeys = goAccounts.reduce(
-    (s, a) => s + a.workspaces.reduce((s2, w) => s2 + w.keys.length, 0),
-    0,
-  );
+  const affinityWorkspaceName =
+    goAccounts
+      .flatMap((account) => account.workspaces)
+      .find((workspace) => workspace.id === data.affinity_workspace_id)?.name ??
+    null;
 
   return (
     <div className="max-w-5xl space-y-5">
@@ -93,7 +92,7 @@ export function WorkspacesScreen() {
               工作区调度
             </h2>
             <p className="text-xs text-espresso-400 mt-0.5">
-              {goAccounts.length} 账户 · {totalKeys} Key
+              {goAccounts.length} 账户
             </p>
           </div>
         </div>
@@ -107,16 +106,14 @@ export function WorkspacesScreen() {
         </Button>
       </div>
 
-      <ActiveKeyBar
-        activeKeyId={data.current_key_id}
-        onClear={handleClearActive}
+      <AffinityWorkspaceBar
+        affinityWorkspaceName={affinityWorkspaceName}
+        onClear={handleClearAffinity}
       />
 
-      <KeyFilterBar
+      <WorkspaceFilterBar
         search={search}
         onSearchChange={setSearch}
-        statusFilter={statusFilter}
-        onStatusFilterChange={setStatusFilter}
         workspaceFilter={workspaceFilter}
         onWorkspaceFilterChange={setWorkspaceFilter}
       />
@@ -133,12 +130,11 @@ export function WorkspacesScreen() {
           <p className="text-sm text-espresso-500">暂无工作区数据</p>
         </motion.div>
       ) : (
-        <KeyCardGrid
+        <WorkspaceScheduleGrid
           accounts={goAccounts}
-          currentKeyId={data.current_key_id}
-          onSetActive={handleSetActive}
+          affinityWorkspaceId={data.affinity_workspace_id}
+          onSetAffinity={handleSetAffinity}
           search={search}
-          statusFilter={statusFilter}
           workspaceFilter={workspaceFilter}
         />
       )}

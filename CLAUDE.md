@@ -28,17 +28,20 @@ The frontend dist is embedded into the Rust binary via `rust-embed` (`src/api/ro
 
 ### Rust backend (`src/`)
 
-**`main.rs`** — Startup: loads `config.yaml`, discovers OpenCode API keys, builds key pool, starts axum server on `0.0.0.0:8180`. Spawns background refresh task.
+**`main.rs`** — Startup: loads `config.yaml`, discovers OpenCode workspaces, builds workspace scheduler, starts axum server on `0.0.0.0:8180`. Spawns background refresh task.
 
-**`pool/`** — Key pool management:
-- `key.rs` — `PoolKey` struct with `is_fully_exhausted()` (any of hourly/weekly/monthly ≥ 100%) and `max_usage_pct()`.
-- `pool.rs` — `KeyPoolHandle`: `select_key(depleted_ids: Option<&HashSet>)` for sticky key selection with per-request exclusion, `mark_current_depleted()` that spawns async usage refresh, `trigger_refresh()` for full rediscovery.
-- `selector.rs` — `StickyKeySelector`: holds current active key ID, sticks to it until depleted.
-- `pick_best_key_id()` — filters non-depleted/subscribed/non-exhausted keys, picks lowest `max_usage_pct()` per workspace.
+**`workspace/`** — Workspace-level scheduling:
+- `credential.rs` — `WorkspaceCredential` stores the single upstream credential retained for a workspace and exposes masked display helpers.
+- `record.rs` — `WorkspacePool` stores workspace identity, account identity, subscription state, Go usage, and one `WorkspaceCredential`.
+- `scheduler.rs` — `WorkspaceScheduler` schedules available workspaces, preserves workspace affinity, rotates by workspace usage, and returns `SelectedWorkspaceCredential` for proxy requests.
+- `handle.rs` — `WorkspaceSchedulerHandle` owns the runtime scheduler, configuration snapshots, refresh guard, upstream clients, and request logs.
+- `discovery.rs` — discovers accounts and workspaces, reads each workspace key list, and keeps the first key as the workspace proxy credential.
+
+Workspace is the quota boundary. One account can have multiple workspaces, and workspace quotas are independent. One workspace can expose multiple OpenCode keys, while those keys share the same workspace quota, so runtime scheduling stores exactly one credential per workspace and never models key-level capacity.
 
 **`proxy/`** — Request forwarding:
-- `openai.rs` — `/go/v1/chat/completions` handler: parses `ChatCompletionRequest`, applies image filter, retry loop with depleted key exclusion.
-- `claude.rs` — `/go/v1/messages` handler: parses `AnthropicMessagesRequest`, same retry/switch pattern.
+- `openai.rs` — `/go/v1/chat/completions` handler: parses `ChatCompletionRequest`, applies image filter, retries across available workspaces, and removes exhausted workspaces from the runtime scheduler.
+- `claude.rs` — `/go/v1/messages` handler: parses `AnthropicMessagesRequest` and uses the same workspace retry pattern.
 - `filter.rs` — Image content filter (remove/replace/pass_through per model config).
 - `stream.rs` — SSE forwarding with `data: [DONE]` termination for OpenAI.
 - `error.rs` — OpenAI/Anthropic error response formatters.
@@ -46,7 +49,7 @@ The frontend dist is embedded into the Rust binary via `rust-embed` (`src/api/ro
 **`protocol/`** — Strict typed request structs with enums (`ChatRole`, `AnthropicRole`, `ContentPart`, `AnthropicContentBlock`, etc.). Uses `#[serde(untagged)]` for string-vs-array content discriminator and `#[serde(flatten)] extra: HashMap` for passthrough of unmodeled fields.
 
 **`opencode/`** — OpenCode.ai integration:
-- `client.rs` — `OpencodeClient`: scrapes workspace pages (HTML) and calls SolidStart server functions to discover keys, workspaces, and Go usage.
+- `client.rs` — `OpencodeClient`: scrapes workspace pages (HTML) and calls SolidStart server functions to discover workspaces, workspace keys, and Go usage.
 - `serverfn.rs` — SolidStart `$R` response parser.
 - `types.rs` — `Workspace`, `ApiKeyEntry`, `BillingInfo`, `GoUsage`, `SubscriptionPlan`.
 
@@ -60,8 +63,8 @@ The frontend dist is embedded into the Rust binary via `rust-embed` (`src/api/ro
 
 React 19 SPA, embedded in Rust binary. Uses Tailwind (custom cream/espresso/terra/harvest palette), framer-motion animations, TanStack Query for data fetching.
 
-- `features/dashboard/` — Key pool stats + Go usage overview
-- `features/workspaces/` — Workspace scheduling view with search/filter, active key bar
+- `features/dashboard/` — Workspace stats + Go usage overview
+- `features/workspaces/` — Workspace scheduling view with search/filter and affinity workspace controls
 - `features/models/` — Model list by provider (OpenAI/Claude tabs)
 - `features/logs/` — Request log table with protocol/success filters
 - `features/accounts/` — Account CRUD with workspace sections
@@ -70,11 +73,11 @@ React 19 SPA, embedded in Rust binary. Uses Tailwind (custom cream/espresso/terr
 - `shared/ui/` — Button, Input, Select (custom, not native), Card, Dialog, Sidebar, Badge, etc.
 - `shared/types/api.ts` — TypeScript mirrors of all API response types
 
-### Key trust hierarchy
+### Workspace trust hierarchy
 
 1. **Upstream API response** — authoritative for quota exhaustion (402/429 + specific keywords: `insufficient`, `quota`, `balance` only — NOT `exceeded`, `rate_limit`, or `overloaded_error`)
-2. **Go usage data** (`go_usage`) — scraped from OpenCode workspace Go page, used for key selection and exhaustion detection
-3. **Memory cache** — depleted flags, selector state — refreshed asynchronously, overridden by API signals
+2. **Go usage data** (`go_usage`) — scraped from OpenCode workspace Go page, used for workspace scheduling and exhaustion detection
+3. **Memory cache** — workspace queue, affinity workspace, current workspace — refreshed asynchronously, overridden by API signals
 
 ### Config (`config.yaml`)
 

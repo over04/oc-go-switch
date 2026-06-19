@@ -1,11 +1,11 @@
-use std::collections::{HashMap, VecDeque};
+use std::collections::HashMap;
 
 use tracing::{error, info, warn};
 
 use crate::{
     business::workspace::{
-        error::PoolError, key::PoolKey, record::WorkspacePool, scheduler::KeyPool,
-        status::WorkspacePoolStatus,
+        credential::WorkspaceCredential, error::PoolError, record::WorkspacePool,
+        scheduler::WorkspaceScheduler, status::WorkspacePoolStatus,
     },
     common::config::runtime::RuntimeConfig,
 };
@@ -15,7 +15,7 @@ use adapter::opencode::{client::OpencodeClient, model::subscription_plan::Subscr
 ///
 /// 发现结果保留 available、exhausted、unsubscribed 三类工作区；
 /// 调度队列只从 available 工作区构建。
-pub async fn discover(config: &RuntimeConfig) -> Result<KeyPool, PoolError> {
+pub async fn discover(config: &RuntimeConfig) -> Result<WorkspaceScheduler, PoolError> {
     let mut workspaces: HashMap<String, WorkspacePool> = HashMap::new();
 
     for account in &config.accounts {
@@ -66,18 +66,12 @@ pub async fn discover(config: &RuntimeConfig) -> Result<KeyPool, PoolError> {
                 None
             };
 
-            let keys: VecDeque<PoolKey> = key_entries
-                .into_iter()
-                .map(|key_entry| PoolKey {
-                    id: format!("{}/{}/{}", account.name, workspace.id, key_entry.id),
-                    key_value: key_entry.key,
-                    key_name: key_entry.name,
-                })
-                .collect();
-
-            if keys.is_empty() {
+            let Some(key_entry) = key_entries.into_iter().next() else {
                 continue;
-            }
+            };
+            let credential = WorkspaceCredential {
+                value: key_entry.key,
+            };
 
             let workspace_id = format!("{}/{}", account.name, workspace.id);
             let status = match (
@@ -99,21 +93,21 @@ pub async fn discover(config: &RuntimeConfig) -> Result<KeyPool, PoolError> {
                     status,
                     plan: billing.plan,
                     go_usage,
-                    keys,
+                    credential,
                 },
             );
         }
     }
 
-    let pool = KeyPool::new(workspaces);
-    if pool.has_available_workspace() {
-        info!(
-            "KeyPool: 共发现 {} 个工作区，{} 个可调度 Go 工作区",
-            pool.workspaces.len(),
-            pool.available_workspace_count()
-        );
-        Ok(pool)
-    } else {
-        Err(PoolError::NoAvailableWorkspace)
+    let pool = WorkspaceScheduler::new(workspaces);
+    if pool.workspaces.is_empty() {
+        return Err(PoolError::NoWorkspace);
     }
+
+    info!(
+        "WorkspaceScheduler: 共发现 {} 个工作区，{} 个可调度 Go 工作区",
+        pool.workspaces.len(),
+        pool.available_workspace_count()
+    );
+    Ok(pool)
 }

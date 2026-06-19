@@ -9,10 +9,10 @@ use crate::business::{
         merged_models::MergedModelsResponse, model_list_result::ModelListResult,
         service::fetch_model_list,
     },
-    workspace::handle::KeyPoolHandle,
+    workspace::handle::WorkspaceSchedulerHandle,
 };
 
-pub async fn list_models_v1(State(handle): State<KeyPoolHandle>) -> impl IntoResponse {
+pub async fn list_models_v1(State(handle): State<WorkspaceSchedulerHandle>) -> impl IntoResponse {
     let base_url = handle.runtime_config().go.base_url.clone();
 
     match fetch_model_list(&handle, &base_url).await {
@@ -27,7 +27,9 @@ pub async fn list_models_v1(State(handle): State<KeyPoolHandle>) -> impl IntoRes
     }
 }
 
-pub async fn list_models(State(handle): State<KeyPoolHandle>) -> Json<MergedModelsResponse> {
+pub async fn list_models(
+    State(handle): State<WorkspaceSchedulerHandle>,
+) -> Json<MergedModelsResponse> {
     let base_url = handle.runtime_config().go.base_url.clone();
 
     let (openai, claude) = tokio::join!(
@@ -41,12 +43,16 @@ pub async fn list_models(State(handle): State<KeyPoolHandle>) -> Json<MergedMode
     })
 }
 
-pub async fn list_openai_models(State(handle): State<KeyPoolHandle>) -> Json<ModelListResult> {
+pub async fn list_openai_models(
+    State(handle): State<WorkspaceSchedulerHandle>,
+) -> Json<ModelListResult> {
     let url = handle.runtime_config().go.base_url.clone();
     Json(model_result(fetch_model_list(&handle, &url).await))
 }
 
-pub async fn list_claude_models(State(handle): State<KeyPoolHandle>) -> Json<ModelListResult> {
+pub async fn list_claude_models(
+    State(handle): State<WorkspaceSchedulerHandle>,
+) -> Json<ModelListResult> {
     let url = handle.runtime_config().go.base_url.clone();
     Json(model_result(fetch_model_list(&handle, &url).await))
 }

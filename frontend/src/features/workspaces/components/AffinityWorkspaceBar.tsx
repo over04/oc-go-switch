@@ -1,15 +1,18 @@
 import { motion, AnimatePresence } from "framer-motion";
 import { Button } from "@/shared/ui/Button";
 
-interface ActiveKeyBarProps {
-  activeKeyId: string | null;
+interface AffinityWorkspaceBarProps {
+  affinityWorkspaceName: string | null;
   onClear: () => void;
 }
 
-export function ActiveKeyBar({ activeKeyId, onClear }: ActiveKeyBarProps) {
+export function AffinityWorkspaceBar({
+  affinityWorkspaceName,
+  onClear,
+}: AffinityWorkspaceBarProps) {
   return (
     <AnimatePresence>
-      {activeKeyId && (
+      {affinityWorkspaceName && (
         <motion.div
           initial={{ opacity: 0, height: 0 }}
           animate={{ opacity: 1, height: "auto" }}
@@ -32,14 +35,14 @@ export function ActiveKeyBar({ activeKeyId, onClear }: ActiveKeyBarProps) {
             </motion.span>
 
             <span className="text-xs text-espresso-500 font-medium">
-              当前调度 Key
+              亲和工作区
             </span>
             <code className="text-sm font-mono font-semibold text-terra-500 bg-terra-500/5 px-2 py-0.5 rounded-full">
-              {activeKeyId.split("/").pop() ?? activeKeyId}
+              {affinityWorkspaceName}
             </code>
 
             <Button size="xs" tone="default" onClick={onClear}>
-              清除固定
+              清除亲和
             </Button>
           </div>
         </motion.div>

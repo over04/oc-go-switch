@@ -1,5 +1,5 @@
 use std::{
-    collections::{HashMap, VecDeque},
+    collections::HashMap,
     sync::{Arc, Mutex},
 };
 
@@ -21,8 +21,8 @@ use crate::{
         log::store::LogStore,
         proxy::router::{claude_router, openai_router},
         workspace::{
-            handle::KeyPoolHandle, key::PoolKey, record::WorkspacePool, scheduler::KeyPool,
-            status::WorkspacePoolStatus,
+            credential::WorkspaceCredential, handle::WorkspaceSchedulerHandle,
+            record::WorkspacePool, scheduler::WorkspaceScheduler, status::WorkspacePoolStatus,
         },
     },
     common::config::{
@@ -439,9 +439,9 @@ fn request_stream(body: &[u8]) -> bool {
 fn handle(
     base_url: String,
     image_filter: ImageFilterConfig,
-) -> Result<KeyPoolHandle, Box<dyn std::error::Error>> {
-    Ok(KeyPoolHandle::try_new(
-        KeyPool::new(HashMap::from([workspace()])),
+) -> Result<WorkspaceSchedulerHandle, Box<dyn std::error::Error>> {
+    Ok(WorkspaceSchedulerHandle::try_new(
+        WorkspaceScheduler::new(HashMap::from([workspace()])),
         Config {
             fixed: FixedConfig {
                 listen: "127.0.0.1:0".to_string(),
@@ -483,11 +483,9 @@ fn workspace() -> (String, WorkspacePool) {
                 monthly_percent: 1,
                 monthly_reset_sec: 3600,
             }),
-            keys: VecDeque::from([PoolKey {
-                id: "acct/workspace/key".to_string(),
-                key_value: "sk-upstream-key-0000".to_string(),
-                key_name: "key".to_string(),
-            }]),
+            credential: WorkspaceCredential {
+                value: "sk-upstream-key-0000".to_string(),
+            },
         },
     )
 }

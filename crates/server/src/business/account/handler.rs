@@ -16,19 +16,21 @@ use crate::{
             service::account_entry,
         },
         configuration::service::save_runtime_config,
-        workspace::handle::KeyPoolHandle,
+        workspace::handle::WorkspaceSchedulerHandle,
     },
     common::config::account::AccountConfig,
 };
 
-pub async fn list_accounts(State(handle): State<KeyPoolHandle>) -> Json<AccountListRespDto> {
+pub async fn list_accounts(
+    State(handle): State<WorkspaceSchedulerHandle>,
+) -> Json<AccountListRespDto> {
     let config = handle.runtime_config();
     let accounts: Vec<AccountListEntryDto> = config.accounts.iter().map(account_entry).collect();
     Json(AccountListRespDto { accounts })
 }
 
 pub async fn add_account(
-    State(handle): State<KeyPoolHandle>,
+    State(handle): State<WorkspaceSchedulerHandle>,
     Json(req): Json<AccountAddReqDto>,
 ) -> Result<Json<AccountListRespDto>, StatusCode> {
     if req.name.is_empty() || req.auth.is_empty() || req.label.is_empty() {
@@ -59,7 +61,7 @@ pub async fn add_account(
 }
 
 pub async fn delete_account(
-    State(handle): State<KeyPoolHandle>,
+    State(handle): State<WorkspaceSchedulerHandle>,
     Path(name): Path<String>,
 ) -> Result<Json<AccountListRespDto>, StatusCode> {
     let mut config = handle.runtime_config().as_ref().clone();
@@ -76,7 +78,7 @@ pub async fn delete_account(
 }
 
 pub async fn edit_account(
-    State(handle): State<KeyPoolHandle>,
+    State(handle): State<WorkspaceSchedulerHandle>,
     Path(name): Path<String>,
     Json(req): Json<AccountEditReqDto>,
 ) -> Result<Json<AccountListRespDto>, StatusCode> {

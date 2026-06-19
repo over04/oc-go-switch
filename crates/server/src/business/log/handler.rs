@@ -4,12 +4,12 @@ use axum::{
 };
 
 use crate::{
-    business::{log::query::LogListQuery, workspace::handle::KeyPoolHandle},
+    business::{log::query::LogListQuery, workspace::handle::WorkspaceSchedulerHandle},
     common::model::log::LogEntry,
 };
 
 pub async fn list_logs(
-    State(handle): State<KeyPoolHandle>,
+    State(handle): State<WorkspaceSchedulerHandle>,
     Query(query): Query<LogListQuery>,
 ) -> Json<Vec<LogEntry>> {
     let limit = query.limit.unwrap_or(100);
@@ -20,7 +20,7 @@ pub async fn list_logs(
     )
 }
 
-pub async fn clear_logs(State(handle): State<KeyPoolHandle>) -> &'static str {
+pub async fn clear_logs(State(handle): State<WorkspaceSchedulerHandle>) -> &'static str {
     handle.clear_logs().await;
     "ok"
 }

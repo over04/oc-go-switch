@@ -41,9 +41,11 @@ export function DashboardScreen() {
   }
 
   const goWorkspaces = data.go_workspaces;
-  const totalKeys = data.total_keys;
+  const totalWorkspaces = data.total_workspaces;
   const availablePercent =
-    totalKeys > 0 ? Math.round((data.available_keys / totalKeys) * 100) : 0;
+    totalWorkspaces > 0
+      ? Math.round((data.available_workspaces / totalWorkspaces) * 100)
+      : 0;
 
   return (
     <div className="max-w-5xl space-y-8">
@@ -65,7 +67,7 @@ export function DashboardScreen() {
           </div>
 
           <span className="text-xs text-espresso-400 uppercase tracking-[0.15em] font-semibold">
-            Key 总数
+            工作区总数
           </span>
           <motion.p
             className="text-5xl font-bold text-espresso-700 mt-2 tracking-tight tabular-nums"
@@ -73,7 +75,7 @@ export function DashboardScreen() {
             animate={{ scale: 1, opacity: 1 }}
             transition={{ delay: 0.15, duration: 0.4 }}
           >
-            {totalKeys}
+            {totalWorkspaces}
           </motion.p>
           <div className="flex items-center gap-2 mt-3">
             <div className="flex-1 h-1.5 bg-cream-200 rounded-full overflow-hidden">
@@ -91,8 +93,8 @@ export function DashboardScreen() {
         </motion.div>
 
         <StatCard
-          label="可调度 Key"
-          value={data.available_keys}
+          label="可调度"
+          value={data.available_workspaces}
           tone="success"
           delay={0.05}
         />

@@ -1,9 +1,7 @@
 use adapter::opencode::model::go_usage::GoUsage;
 use serde::Serialize;
 
-use crate::business::status::dto::{
-    key::KeyStatusEntry, workspace_queue_status::WorkspaceQueueStatus,
-};
+use crate::business::status::dto::workspace_queue_status::WorkspaceQueueStatus;
 
 #[derive(Debug, Serialize)]
 pub struct WorkspaceStatus {
@@ -15,12 +13,14 @@ pub struct WorkspaceStatus {
     pub status: WorkspaceQueueStatus,
     /// 当前最近一次请求是否使用该工作区。
     pub is_current: bool,
+    /// 当前是否为亲和调度工作区。
+    pub is_affinity: bool,
     /// 在调度队列中的位置；无值表示当前不参与调度。
     pub queue_position: Option<usize>,
     /// OpenCode 订阅计划展示值。
     pub plan: Option<String>,
     /// Go 用量数据。
     pub go_usage: Option<GoUsage>,
-    /// 工作区内 key 展示状态。
-    pub keys: Vec<KeyStatusEntry>,
+    /// 工作区代理凭证脱敏值。
+    pub credential_masked: String,
 }

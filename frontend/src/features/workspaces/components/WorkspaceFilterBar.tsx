@@ -1,20 +1,12 @@
 import { Input } from "@/shared/ui/Input";
-import type { KeyStatus, WorkspaceStatusKind } from "@/shared/types/api";
+import type { WorkspaceStatusKind } from "@/shared/types/api";
 
-interface KeyFilterBarProps {
+interface WorkspaceFilterBarProps {
   search: string;
   onSearchChange: (v: string) => void;
-  statusFilter: KeyStatus | "all";
-  onStatusFilterChange: (v: KeyStatus | "all") => void;
   workspaceFilter: WorkspaceStatusKind | "all";
   onWorkspaceFilterChange: (v: WorkspaceStatusKind | "all") => void;
 }
-
-const statusOptions: { value: KeyStatus | "all"; label: string }[] = [
-  { value: "all", label: "全部" },
-  { value: "active", label: "活跃" },
-  { value: "idle", label: "空闲" },
-];
 
 const workspaceOptions: { value: WorkspaceStatusKind | "all"; label: string }[] = [
   { value: "all", label: "全部工作区" },
@@ -23,37 +15,20 @@ const workspaceOptions: { value: WorkspaceStatusKind | "all"; label: string }[] 
   { value: "unsubscribed", label: "无订阅" },
 ];
 
-export function KeyFilterBar({
+export function WorkspaceFilterBar({
   search,
   onSearchChange,
-  statusFilter,
-  onStatusFilterChange,
   workspaceFilter,
   onWorkspaceFilterChange,
-}: KeyFilterBarProps) {
+}: WorkspaceFilterBarProps) {
   return (
     <div className="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-3">
       <Input
-        placeholder="搜索 Key 或工作区..."
+        placeholder="搜索工作区或凭证..."
         value={search}
         onChange={(e) => onSearchChange(e.target.value)}
         className="max-w-full sm:max-w-[240px]"
       />
-      <div className="flex items-center gap-1 bg-cream-100 rounded-full p-0.5">
-        {statusOptions.map((opt) => (
-          <button
-            key={opt.value}
-            onClick={() => onStatusFilterChange(opt.value)}
-            className={`px-3 py-1 text-xs rounded-full font-medium transition-all duration-200 ${
-              statusFilter === opt.value
-                ? "bg-white text-espresso-700 shadow-sm"
-                : "text-espresso-400 hover:text-espresso-600"
-            }`}
-          >
-            {opt.label}
-          </button>
-        ))}
-      </div>
       <div className="flex items-center gap-1 bg-cream-100 rounded-full p-0.5 overflow-x-auto">
         {workspaceOptions.map((opt) => (
           <button

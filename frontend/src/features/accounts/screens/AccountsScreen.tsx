@@ -120,7 +120,6 @@ export function AccountsScreen() {
             (a) => a.name === acct.name,
           );
           const workspaces = scheduleAcct?.workspaces ?? [];
-          const keyCount = workspaces.reduce((s, w) => s + w.keys.length, 0);
 
           return (
             <motion.div
@@ -175,7 +174,7 @@ export function AccountsScreen() {
                   </div>
                   <div className="flex items-center gap-3">
                     <span className="text-xs text-espresso-400">
-                      {workspaces.length} 工作区 · {keyCount} Key
+                      {workspaces.length} 工作区
                     </span>
                     {!editing && (
                       <Button

@@ -6,8 +6,8 @@ use crate::common::config::{error::ConfigError, store::ConfigStoreError};
 pub enum PoolError {
     #[error("发现账户失败: {0}")]
     Discover(String),
-    #[error("未发现可用的 Go 工作区，请检查配置和账户授权。")]
-    NoAvailableWorkspace,
+    #[error("未发现工作区，请检查配置和账户授权。")]
+    NoWorkspace,
     #[error("配置无效: {0}")]
     Config(#[from] ConfigError),
     #[error("保存配置失败: {0}")]

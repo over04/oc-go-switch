@@ -1,8 +1,10 @@
 use axum::http::StatusCode;
 
-use crate::business::workspace::handle::KeyPoolHandle;
+use crate::business::workspace::handle::WorkspaceSchedulerHandle;
 
-pub async fn refresh_workspace_pool(handle: &KeyPoolHandle) -> Result<&'static str, StatusCode> {
+pub async fn refresh_workspace_pool(
+    handle: &WorkspaceSchedulerHandle,
+) -> Result<&'static str, StatusCode> {
     match handle.refresh_now().await {
         Ok(true) => Ok("ok"),
         Ok(false) => Ok("refresh already running"),

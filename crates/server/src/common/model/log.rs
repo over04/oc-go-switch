@@ -9,7 +9,7 @@ pub struct LogEntry {
     pub model: Option<String>,
     pub status_code: u16,
     pub duration_ms: u64,
-    pub key_masked: String,
+    pub credential_masked: String,
     pub success: bool,
     pub error_message: Option<String>,
     pub stream: bool,

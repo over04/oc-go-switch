@@ -12,10 +12,12 @@ use crate::business::{
         },
         service::save_runtime_patch,
     },
-    workspace::handle::KeyPoolHandle,
+    workspace::handle::WorkspaceSchedulerHandle,
 };
 
-pub async fn get_config(State(handle): State<KeyPoolHandle>) -> Json<ConfigurationGetRespDto> {
+pub async fn get_config(
+    State(handle): State<WorkspaceSchedulerHandle>,
+) -> Json<ConfigurationGetRespDto> {
     let fixed = handle.fixed_config();
     let runtime = handle.runtime_config();
     Json(ConfigurationGetRespDto {
@@ -34,7 +36,7 @@ pub async fn get_config(State(handle): State<KeyPoolHandle>) -> Json<Configurati
 }
 
 pub async fn update_config(
-    State(handle): State<KeyPoolHandle>,
+    State(handle): State<WorkspaceSchedulerHandle>,
     Json(req): Json<ConfigurationUpdateReqDto>,
 ) -> Result<Json<ConfigurationGetRespDto>, StatusCode> {
     save_runtime_patch(&handle, req).await?;

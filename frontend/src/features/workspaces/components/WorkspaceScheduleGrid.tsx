@@ -2,33 +2,20 @@ import { useState } from "react";
 import { motion } from "framer-motion";
 import clsx from "clsx";
 import { Badge } from "@/shared/ui/Badge";
-import { CopyButton } from "@/shared/ui/CopyButton";
 import { Button } from "@/shared/ui/Button";
 import { UsageBar } from "@/features/pool/components/UsageBar";
 import type {
   AccountStatus,
-  KeyStatusEntry,
-  KeyStatus,
   WorkspaceStatusKind,
 } from "@/shared/types/api";
 
-interface KeyCardGridProps {
+interface WorkspaceScheduleGridProps {
   accounts: AccountStatus[];
-  currentKeyId: string | null;
-  onSetActive: (keyId: string) => void;
+  affinityWorkspaceId: string | null;
+  onSetAffinity: (workspaceId: string) => void;
   search: string;
-  statusFilter: KeyStatus | "all";
   workspaceFilter: WorkspaceStatusKind | "all";
 }
-
-const statusLabel: Record<KeyStatus, string> = {
-  active: "活跃",
-  idle: "空闲",
-};
-const statusDot: Record<KeyStatus, string> = {
-  active: "bg-harvest-500",
-  idle: "bg-espresso-300",
-};
 
 const workspaceLabel = {
   available: "可用",
@@ -42,28 +29,31 @@ const workspaceTone = {
   unsubscribed: "default",
 } as const;
 
-function matchesSearch(key: KeyStatusEntry, workspaceName: string, search: string): boolean {
+function matchesSearch(
+  workspaceName: string,
+  credentialMasked: string,
+  search: string,
+): boolean {
   if (!search) return true;
   const v = search.toLowerCase();
   return (
-    key.masked.toLowerCase().includes(v) ||
-    workspaceName.toLowerCase().includes(v)
+    workspaceName.toLowerCase().includes(v) ||
+    credentialMasked.toLowerCase().includes(v)
   );
 }
 
-export function KeyCardGrid({
+export function WorkspaceScheduleGrid({
   accounts,
-  currentKeyId,
-  onSetActive,
+  affinityWorkspaceId,
+  onSetAffinity,
   search,
-  statusFilter,
   workspaceFilter,
-}: KeyCardGridProps) {
+}: WorkspaceScheduleGridProps) {
   const [expanded, setExpanded] = useState<Set<string>>(() => {
     const s = new Set<string>();
     for (const acct of accounts) {
       for (const ws of acct.workspaces) {
-        if (ws.keys.some((k) => k.id === currentKeyId)) {
+        if (ws.id === affinityWorkspaceId || ws.is_current) {
           s.add(ws.id);
         }
       }
@@ -84,7 +74,6 @@ export function KeyCardGrid({
     <div className="space-y-5">
       {accounts.map((acct) => (
         <div key={acct.name}>
-          {/* Account header */}
           <div className="flex items-center gap-2 mb-3">
             <span className="text-xs font-semibold text-espresso-500 uppercase tracking-wider">
               {acct.label}
@@ -98,13 +87,12 @@ export function KeyCardGrid({
               if (workspaceFilter !== "all" && ws.status !== workspaceFilter) {
                 return null;
               }
-              const filteredKeys = ws.keys.filter(
-                (k) =>
-                  matchesSearch(k, ws.name, search) &&
-                  (statusFilter === "all" || k.status === statusFilter),
-              );
+              if (!matchesSearch(ws.name, ws.credential_masked, search)) {
+                return null;
+              }
+
               const isExpanded = expanded.has(ws.id);
-              const hasActive = ws.keys.some((k) => k.id === currentKeyId);
+              const hasAffinity = ws.id === affinityWorkspaceId;
               const canSchedule = ws.status === "available";
 
               return (
@@ -115,7 +103,7 @@ export function KeyCardGrid({
                   transition={{ delay: wi * 0.04, duration: 0.3 }}
                   className={clsx(
                     "bg-white rounded-mcm-lg border shadow-mcm overflow-hidden transition-shadow duration-200 hover:shadow-mcm-md",
-                    hasActive
+                    hasAffinity
                       ? "border-terra-500/30"
                       : "border-cream-200",
                   )}
@@ -139,21 +127,17 @@ export function KeyCardGrid({
                         {ws.status === "unsubscribed" ? "无订阅" : "Go"}
                       </Badge>
                       <Badge size="xs" tone={workspaceTone[ws.status]}>
-                        {ws.status === "available" && ws.is_current
-                          ? "当前可用"
-                          : ws.status === "available"
-                            ? `可用 #${ws.queue_position ?? "-"}`
-                            : workspaceLabel[ws.status]}
+                        {ws.status === "available" && ws.is_affinity
+                          ? "亲和中"
+                          : ws.status === "available" && ws.is_current
+                            ? "最近使用"
+                            : ws.status === "available"
+                              ? `可用 #${ws.queue_position ?? "-"}`
+                              : workspaceLabel[ws.status]}
                       </Badge>
-                      {hasActive && (
-                        <span className="text-xs text-terra-500 font-medium flex items-center gap-1">
-                          <span className="w-1.5 h-1.5 rounded-full bg-terra-500" />
-                          当前调度
-                        </span>
-                      )}
                     </div>
                     <div className="flex items-center gap-3 text-xs text-espresso-400">
-                      <span>{ws.keys.length} Key</span>
+                      <code>{ws.credential_masked}</code>
                       {ws.go_usage && (
                         <span className="tabular-nums">
                           {ws.go_usage.hourly_percent}% 小时
@@ -184,67 +168,39 @@ export function KeyCardGrid({
                         </div>
                       )}
 
-                      {filteredKeys.length === 0 ? (
-                        <p className="text-xs text-espresso-300 text-center py-4">
-                          无匹配 Key
-                        </p>
-                      ) : (
-                        <div className="flex flex-wrap gap-2">
-                          {filteredKeys.map((k) => {
-                            const isActive = k.id === currentKeyId;
-                            return (
-                              <motion.div
-                                key={k.id}
-                                initial={{ opacity: 0, scale: 0.9 }}
-                                animate={{ opacity: 1, scale: 1 }}
-                                whileHover={{ y: -1 }}
-                                className={clsx(
-                                  "flex items-center gap-2 px-3 py-1.5 rounded-full border transition-all duration-200",
-                                  isActive
-                                    ? "bg-terra-500/5 border-terra-500/30 ring-1 ring-terra-500/10"
-                                    : "bg-cream-50 border-cream-200 hover:border-cream-300",
-                                )}
-                              >
-                                <span
-                                  className={clsx(
-                                    "w-1.5 h-1.5 rounded-full",
-                                    statusDot[k.status],
-                                  )}
-                                />
-                                <code className="text-xs font-mono text-espresso-600 truncate max-w-[140px]">
-                                  {k.masked}
-                                </code>
-                                <CopyButton value={k.id} />
-                                <span className="text-[0.625rem] text-espresso-400">
-                                  {statusLabel[k.status]}
-                                </span>
-                                {!isActive && canSchedule && (
-                                  <Button
-                                    size="xs"
-                                    tone="primary"
-                                    onClick={(e) => {
-                                      e.stopPropagation();
-                                      onSetActive(k.id);
-                                    }}
-                                  >
-                                    固定
-                                  </Button>
-                                )}
-                                {!isActive && !canSchedule && (
-                                  <span className="text-[0.625rem] text-espresso-300">
-                                    不参与调度
-                                  </span>
-                                )}
-                                {isActive && (
-                                  <span className="text-xs text-terra-500 font-semibold">
-                                    ◈
-                                  </span>
-                                )}
-                              </motion.div>
-                            );
-                          })}
+                      <div className="flex flex-wrap items-center gap-2">
+                        <div className="flex items-center gap-2 px-3 py-1.5 rounded-full bg-cream-50 border border-cream-200">
+                          <span className="text-[0.625rem] text-espresso-400">
+                            凭证
+                          </span>
+                          <code className="text-xs font-mono text-espresso-600">
+                            {ws.credential_masked}
+                          </code>
                         </div>
-                      )}
+
+                        {!hasAffinity && canSchedule && (
+                          <Button
+                            size="xs"
+                            tone="primary"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              onSetAffinity(ws.id);
+                            }}
+                          >
+                            设为亲和
+                          </Button>
+                        )}
+                        {!hasAffinity && !canSchedule && (
+                          <span className="text-[0.625rem] text-espresso-300">
+                            不参与调度
+                          </span>
+                        )}
+                        {hasAffinity && (
+                          <span className="text-xs text-terra-500 font-semibold">
+                            亲和工作区
+                          </span>
+                        )}
+                      </div>
                     </div>
                   )}
                 </motion.div>

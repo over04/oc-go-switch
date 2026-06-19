@@ -5,10 +5,10 @@ use axum::{
     response::Response,
 };
 
-use crate::business::workspace::handle::KeyPoolHandle;
+use crate::business::workspace::handle::WorkspaceSchedulerHandle;
 
 pub async fn admin_auth_middleware(
-    State(handle): State<KeyPoolHandle>,
+    State(handle): State<WorkspaceSchedulerHandle>,
     request: Request<axum::body::Body>,
     next: middleware::Next,
 ) -> Result<Response, StatusCode> {
@@ -18,7 +18,7 @@ pub async fn admin_auth_middleware(
 }
 
 pub async fn openai_auth_middleware(
-    State(handle): State<KeyPoolHandle>,
+    State(handle): State<WorkspaceSchedulerHandle>,
     request: Request<axum::body::Body>,
     next: middleware::Next,
 ) -> Result<Response, StatusCode> {
@@ -28,7 +28,7 @@ pub async fn openai_auth_middleware(
 }
 
 pub async fn claude_auth_middleware(
-    State(handle): State<KeyPoolHandle>,
+    State(handle): State<WorkspaceSchedulerHandle>,
     request: Request<axum::body::Body>,
     next: middleware::Next,
 ) -> Result<Response, StatusCode> {

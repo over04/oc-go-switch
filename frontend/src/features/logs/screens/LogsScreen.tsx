@@ -43,7 +43,7 @@ export function LogsScreen() {
     if (
       search &&
       !e.model?.toLowerCase().includes(search.toLowerCase()) &&
-      !e.key_masked.toLowerCase().includes(search.toLowerCase())
+      !e.credential_masked.toLowerCase().includes(search.toLowerCase())
     )
       return false;
     return true;
@@ -72,7 +72,7 @@ export function LogsScreen() {
       {/* Filters */}
       <div className="flex flex-wrap items-center gap-2 md:gap-3">
         <Input
-          placeholder="搜索模型或 Key..."
+          placeholder="搜索模型或凭证..."
           value={search}
           onChange={(e) => setSearch(e.target.value)}
           className="max-w-full sm:max-w-[240px]"
@@ -156,7 +156,7 @@ export function LogsScreen() {
                     耗时
                   </th>
                   <th className="px-4 py-2.5 text-left text-xs font-semibold text-espresso-400 uppercase tracking-wider">
-                    Key
+                    凭证
                   </th>
                   <th className="px-4 py-2.5 text-left text-xs font-semibold text-espresso-400 uppercase tracking-wider">
                     备注
@@ -210,7 +210,7 @@ export function LogsScreen() {
                         {e.duration_ms}ms
                       </td>
                       <td className="px-4 py-2.5 text-xs text-espresso-400 font-mono">
-                        {e.key_masked}
+                        {e.credential_masked}
                       </td>
                       <td className="px-4 py-2.5 text-xs text-espresso-400 max-w-[160px] truncate">
                         {e.error_message ?? "-"}

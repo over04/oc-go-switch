@@ -2,7 +2,8 @@ use axum::http::StatusCode;
 
 use crate::{
     business::{
-        configuration::dto::update::ConfigurationUpdateReqDto, workspace::handle::KeyPoolHandle,
+        configuration::dto::update::ConfigurationUpdateReqDto,
+        workspace::handle::WorkspaceSchedulerHandle,
     },
     common::config::runtime::RuntimeConfig,
 };
@@ -15,7 +16,7 @@ pub fn validate_token_input(value: String) -> Result<String, StatusCode> {
 }
 
 pub async fn save_runtime_patch(
-    handle: &KeyPoolHandle,
+    handle: &WorkspaceSchedulerHandle,
     req: ConfigurationUpdateReqDto,
 ) -> Result<(), StatusCode> {
     let mut runtime = handle.runtime_config().as_ref().clone();
@@ -46,7 +47,7 @@ pub async fn save_runtime_patch(
 }
 
 pub async fn save_runtime_config(
-    handle: &KeyPoolHandle,
+    handle: &WorkspaceSchedulerHandle,
     config: RuntimeConfig,
 ) -> Result<(), StatusCode> {
     handle.save_runtime_config(config).await.map_err(|error| {

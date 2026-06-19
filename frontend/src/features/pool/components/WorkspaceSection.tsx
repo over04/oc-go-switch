@@ -1,6 +1,5 @@
 import { Badge } from "@/shared/ui/Badge";
 import { UsageBar } from "./UsageBar";
-import { KeyRow } from "./KeyRow";
 import type { WorkspaceStatus } from "@/shared/types/api";
 
 interface WorkspaceSectionProps {
@@ -19,8 +18,10 @@ export function WorkspaceSection({ workspace }: WorkspaceSectionProps) {
         </Badge>
         <Badge size="xs" tone={workspace.status === "available" ? "success" : workspace.status === "exhausted" ? "danger" : "default"}>
           {workspace.status === "available"
-            ? workspace.is_current
-              ? "当前可用"
+            ? workspace.is_affinity
+              ? "亲和中"
+              : workspace.is_current
+                ? "最近使用"
               : `可用 #${workspace.queue_position ?? "-"}`
             : workspace.status === "exhausted"
               ? "当前无额度"
@@ -48,10 +49,11 @@ export function WorkspaceSection({ workspace }: WorkspaceSectionProps) {
         </div>
       )}
 
-      <div className="space-y-1">
-        {workspace.keys.map((k) => (
-          <KeyRow key={k.id} keyEntry={k} />
-        ))}
+      <div className="flex items-center justify-between py-1.5 px-3 rounded-full bg-white border border-cream-100">
+        <span className="text-xs text-espresso-400">凭证</span>
+        <code className="text-xs text-espresso-600 font-mono truncate">
+          {workspace.credential_masked}
+        </code>
       </div>
     </div>
   );

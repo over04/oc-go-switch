@@ -1,37 +1,36 @@
 use std::collections::{HashMap, VecDeque};
 
 use crate::business::workspace::{
-    key::PoolKey, record::WorkspacePool, status::WorkspacePoolStatus,
+    credential::WorkspaceCredential, record::WorkspacePool, status::WorkspacePoolStatus,
 };
 
 /// 工作区调度状态。
 ///
 /// 完整工作区数据保存在 `workspaces`，调度队列只保存 available 工作区 id。
-/// Go 额度按工作区共享，因此出队和轮询都以工作区为单位。
+/// Go 额度按工作区共享；同一工作区内多个 OpenCode key 等价，只保存一个代理凭证。
 #[derive(Debug)]
-pub struct KeyPool {
+pub struct WorkspaceScheduler {
     pub workspaces: HashMap<String, WorkspacePool>,
     pub workspace_queue: VecDeque<String>,
+    pub affinity_workspace_id: Option<String>,
     pub current_workspace_id: Option<String>,
-    pub current_key_id: Option<String>,
     pub last_refresh_at: Option<String>,
 }
 
 #[derive(Debug, Clone)]
-pub struct SelectedKey {
-    pub id: String,
-    pub key_value: String,
+pub struct SelectedWorkspaceCredential {
+    pub credential_value: String,
     pub workspace_id: String,
     pub workspace_name: String,
 }
 
-impl SelectedKey {
-    pub fn masked_key(&self) -> String {
-        PoolKey::mask_value(&self.key_value)
+impl SelectedWorkspaceCredential {
+    pub fn masked_credential(&self) -> String {
+        WorkspaceCredential::mask_value(&self.credential_value)
     }
 }
 
-impl KeyPool {
+impl WorkspaceScheduler {
     pub fn new(workspaces: HashMap<String, WorkspacePool>) -> Self {
         let mut workspace_queue: VecDeque<String> = workspaces
             .iter()
@@ -47,8 +46,8 @@ impl KeyPool {
         Self {
             workspaces,
             workspace_queue,
+            affinity_workspace_id: None,
             current_workspace_id: None,
-            current_key_id: None,
             last_refresh_at: None,
         }
     }
@@ -57,78 +56,85 @@ impl KeyPool {
         self.workspace_queue.len()
     }
 
-    pub fn has_available_workspace(&self) -> bool {
-        self.workspaces
-            .values()
-            .any(|workspace| workspace.status == WorkspacePoolStatus::Available)
-    }
-
-    pub fn select(&mut self) -> Option<SelectedKey> {
-        let workspace_id = self.workspace_queue.pop_front()?;
-        let key = {
-            let workspace = self.workspaces.get_mut(&workspace_id)?;
-            workspace.keys.pop_front()?
-        };
-
-        let selected = {
-            let workspace = self.workspaces.get(&workspace_id)?;
-            SelectedKey {
-                id: key.id.clone(),
-                key_value: key.key_value.clone(),
-                workspace_id: workspace.id.clone(),
-                workspace_name: workspace.name.clone(),
+    pub fn select(&mut self) -> Option<SelectedWorkspaceCredential> {
+        if let Some(workspace_id) = self.affinity_workspace_id.clone() {
+            if self.is_available_workspace(&workspace_id) {
+                if let Some(selected) = self.select_from_workspace(&workspace_id) {
+                    return Some(selected);
+                }
             }
-        };
+            self.affinity_workspace_id = None;
+        }
 
-        let workspace = self.workspaces.get_mut(&workspace_id)?;
-        workspace.keys.push_back(key);
-        self.workspace_queue.push_back(workspace_id.clone());
-        self.current_workspace_id = Some(workspace_id);
-        self.current_key_id = Some(selected.id.clone());
+        let workspace_id = self.workspace_queue.pop_front()?;
+        let selected = self.select_from_workspace(&workspace_id)?;
+        self.workspace_queue.push_back(workspace_id);
         Some(selected)
     }
 
-    pub fn set_active_key(&mut self, key_id: &str) -> bool {
-        let Some((workspace_id, key)) = self.take_key(key_id) else {
+    pub fn restore_affinity_workspace(&mut self, workspace_id: &str) -> bool {
+        if !self.is_available_workspace(workspace_id) {
+            self.affinity_workspace_id = None;
             return false;
-        };
-
-        self.current_workspace_id = Some(workspace_id.clone());
-        self.current_key_id = Some(key.id.clone());
-        if let Some(workspace) = self.workspaces.get_mut(&workspace_id) {
-            workspace.keys.push_front(key);
         }
-        self.move_workspace_front(&workspace_id);
+
+        self.affinity_workspace_id = Some(workspace_id.to_string());
+        self.move_workspace_front(workspace_id);
         true
     }
 
-    pub fn clear_active_key(&mut self) {
+    pub fn set_affinity_workspace(&mut self, workspace_id: &str) -> bool {
+        if !self.is_available_workspace(workspace_id) {
+            return false;
+        }
+
+        self.affinity_workspace_id = Some(workspace_id.to_string());
+        self.current_workspace_id = Some(workspace_id.to_string());
+        self.move_workspace_front(workspace_id);
+        true
+    }
+
+    pub fn clear_affinity_workspace(&mut self) {
+        self.affinity_workspace_id = None;
         self.current_workspace_id = None;
-        self.current_key_id = None;
     }
 
     pub fn drop_workspace(&mut self, workspace_id: &str) -> bool {
         self.workspaces.remove(workspace_id);
         self.workspace_queue.retain(|id| id != workspace_id);
+        if self.affinity_workspace_id.as_deref() == Some(workspace_id) {
+            self.affinity_workspace_id = None;
+        }
         if self.current_workspace_id.as_deref() == Some(workspace_id) {
-            self.clear_active_key();
+            self.current_workspace_id = None;
         }
         self.workspace_queue.is_empty()
     }
 
-    fn take_key(&mut self, key_id: &str) -> Option<(String, PoolKey)> {
-        for (workspace_id, workspace) in &mut self.workspaces {
-            if let Some(index) = workspace.keys.iter().position(|key| key.id == key_id) {
-                let key = workspace.keys.remove(index)?;
-                return Some((workspace_id.clone(), key));
-            }
+    fn select_from_workspace(&mut self, workspace_id: &str) -> Option<SelectedWorkspaceCredential> {
+        let workspace = self.workspaces.get(workspace_id)?;
+        if workspace.status != WorkspacePoolStatus::Available {
+            return None;
         }
-        None
+
+        let selected = SelectedWorkspaceCredential {
+            credential_value: workspace.credential.value.clone(),
+            workspace_id: workspace.id.clone(),
+            workspace_name: workspace.name.clone(),
+        };
+        self.current_workspace_id = Some(workspace_id.to_string());
+        Some(selected)
     }
 
     fn move_workspace_front(&mut self, workspace_id: &str) {
         self.workspace_queue.retain(|id| id != workspace_id);
         self.workspace_queue.push_front(workspace_id.to_string());
+    }
+
+    fn is_available_workspace(&self, workspace_id: &str) -> bool {
+        self.workspaces
+            .get(workspace_id)
+            .is_some_and(|workspace| workspace.status == WorkspacePoolStatus::Available)
     }
 }
 
@@ -137,13 +143,14 @@ mod tests {
     use std::collections::{HashMap, VecDeque};
 
     use crate::business::workspace::{
-        key::PoolKey, record::WorkspacePool, scheduler::KeyPool, status::WorkspacePoolStatus,
+        credential::WorkspaceCredential, record::WorkspacePool, scheduler::WorkspaceScheduler,
+        status::WorkspacePoolStatus,
     };
     use adapter::opencode::model::{go_usage::GoUsage, subscription_plan::SubscriptionPlan};
 
     #[test]
     fn queue_contains_available_workspaces_only() {
-        let pool = KeyPool::new(HashMap::from([
+        let pool = WorkspaceScheduler::new(HashMap::from([
             workspace("available", WorkspacePoolStatus::Available, 20),
             workspace("exhausted", WorkspacePoolStatus::Exhausted, 100),
             workspace("unsubscribed", WorkspacePoolStatus::Unsubscribed, 0),
@@ -156,24 +163,97 @@ mod tests {
     }
 
     #[test]
-    fn select_rotates_workspace_and_key() {
-        let mut pool = KeyPool::new(HashMap::from([workspace(
-            "available",
-            WorkspacePoolStatus::Available,
-            20,
-        )]));
+    fn select_rotates_workspaces() {
+        let mut pool = WorkspaceScheduler::new(HashMap::from([
+            workspace("workspace-a", WorkspacePoolStatus::Available, 20),
+            workspace("workspace-b", WorkspacePoolStatus::Available, 10),
+        ]));
 
         let first = pool.select().expect("available workspace should select");
-        let second = pool.select().expect("available workspace should rotate");
+        let second = pool.select().expect("available workspace should select");
 
-        assert_eq!(first.workspace_id, "available");
-        assert_eq!(second.workspace_id, "available");
-        assert_ne!(first.id, second.id);
+        assert_eq!(first.workspace_id, "workspace-b");
+        assert_eq!(second.workspace_id, "workspace-a");
+    }
+
+    #[test]
+    fn set_affinity_workspace_sticks_to_workspace() {
+        let mut pool = WorkspaceScheduler::new(HashMap::from([
+            workspace("workspace-a", WorkspacePoolStatus::Available, 20),
+            workspace("workspace-b", WorkspacePoolStatus::Available, 10),
+        ]));
+
+        assert!(pool.set_affinity_workspace("workspace-a"));
+
+        let selected_workspaces: Vec<String> = (0..4)
+            .map(|_| {
+                pool.select()
+                    .expect("affinity workspace should select")
+                    .workspace_id
+            })
+            .collect();
+
+        assert_eq!(
+            selected_workspaces,
+            vec!["workspace-a", "workspace-a", "workspace-a", "workspace-a"]
+        );
+        assert_eq!(pool.affinity_workspace_id.as_deref(), Some("workspace-a"));
+    }
+
+    #[test]
+    fn restore_affinity_keeps_available_workspace_at_front() {
+        let mut pool = WorkspaceScheduler::new(HashMap::from([
+            workspace("workspace-a", WorkspacePoolStatus::Available, 50),
+            workspace("workspace-b", WorkspacePoolStatus::Available, 10),
+        ]));
+
+        assert!(pool.restore_affinity_workspace("workspace-a"));
+
+        assert_eq!(pool.affinity_workspace_id.as_deref(), Some("workspace-a"));
+        assert_eq!(
+            pool.workspace_queue.front().map(String::as_str),
+            Some("workspace-a")
+        );
+    }
+
+    #[test]
+    fn restore_affinity_clears_unavailable_workspace() {
+        let mut pool = WorkspaceScheduler::new(HashMap::from([
+            workspace("workspace-a", WorkspacePoolStatus::Exhausted, 100),
+            workspace("workspace-b", WorkspacePoolStatus::Available, 10),
+        ]));
+        pool.affinity_workspace_id = Some("workspace-a".to_string());
+
+        assert!(!pool.restore_affinity_workspace("workspace-a"));
+
+        assert_eq!(pool.affinity_workspace_id, None);
+        assert_eq!(
+            pool.workspace_queue.front().map(String::as_str),
+            Some("workspace-b")
+        );
+    }
+
+    #[test]
+    fn drop_workspace_clears_workspace_affinity() {
+        let mut pool = WorkspaceScheduler::new(HashMap::from([
+            workspace("workspace-a", WorkspacePoolStatus::Available, 20),
+            workspace("workspace-b", WorkspacePoolStatus::Available, 10),
+        ]));
+        assert!(pool.set_affinity_workspace("workspace-a"));
+
+        assert!(!pool.drop_workspace("workspace-a"));
+
+        assert_eq!(pool.affinity_workspace_id, None);
+        assert_eq!(pool.current_workspace_id, None);
+        assert_eq!(
+            pool.workspace_queue,
+            VecDeque::from(["workspace-b".to_string()])
+        );
     }
 
     #[test]
     fn drop_workspace_removes_it_from_scheduler() {
-        let mut pool = KeyPool::new(HashMap::from([workspace(
+        let mut pool = WorkspaceScheduler::new(HashMap::from([workspace(
             "available",
             WorkspacePoolStatus::Available,
             20,
@@ -207,18 +287,9 @@ mod tests {
                     monthly_percent: usage,
                     monthly_reset_sec: 1,
                 }),
-                keys: VecDeque::from([
-                    PoolKey {
-                        id: format!("{id}/key-1"),
-                        key_value: "sk-11111111111111111111".to_string(),
-                        key_name: "key-1".to_string(),
-                    },
-                    PoolKey {
-                        id: format!("{id}/key-2"),
-                        key_value: "sk-22222222222222222222".to_string(),
-                        key_name: "key-2".to_string(),
-                    },
-                ]),
+                credential: WorkspaceCredential {
+                    value: format!("sk-{id}-credential"),
+                },
             },
         )
     }

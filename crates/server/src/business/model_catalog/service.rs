@@ -1,13 +1,13 @@
 use crate::business::{
-    model_catalog::model_list::ModelListResponse, workspace::handle::KeyPoolHandle,
+    model_catalog::model_list::ModelListResponse, workspace::handle::WorkspaceSchedulerHandle,
 };
 
 pub async fn fetch_model_list(
-    handle: &KeyPoolHandle,
+    handle: &WorkspaceSchedulerHandle,
     base_url: &str,
 ) -> Result<ModelListResponse, String> {
-    let key = handle
-        .select_key_or_refresh()
+    let credential = handle
+        .select_credential_or_refresh()
         .await
         .ok_or_else(|| "没有可用 Go 工作区".to_string())?;
     let url = format!("{}/models", base_url);
@@ -16,7 +16,10 @@ pub async fn fetch_model_list(
     let resp = clients
         .short
         .get(&url)
-        .header("Authorization", format!("Bearer {}", key.key_value))
+        .header(
+            "Authorization",
+            format!("Bearer {}", credential.credential_value),
+        )
         .send()
         .await
         .map_err(|error| format!("上游不可达: {error}"))?;

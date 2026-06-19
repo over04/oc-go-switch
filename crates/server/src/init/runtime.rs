@@ -5,7 +5,9 @@ use tracing::{error, info};
 use crate::{
     business::{
         log::store::LogStore,
-        workspace::{discovery::discover, handle::KeyPoolHandle, scheduler::KeyPool},
+        workspace::{
+            discovery::discover, handle::WorkspaceSchedulerHandle, scheduler::WorkspaceScheduler,
+        },
     },
     common::config::{store::ConfigStore, Config},
     init::router::build_router,
@@ -21,17 +23,18 @@ pub async fn run() {
     );
 
     let pool = discover(&config.runtime).await.unwrap_or_else(|error| {
-        error!("发现 key 失败: {error}");
+        error!("发现工作区失败: {error}");
         std::process::exit(1);
     });
     log_pool_ready(&pool);
 
     let listen = config.fixed.listen.clone();
-    let handle = KeyPoolHandle::try_new(pool, config, config_store, Arc::new(LogStore::new()))
-        .unwrap_or_else(|error| {
-            error!("初始化 key pool 失败: {error}");
-            std::process::exit(1);
-        });
+    let handle =
+        WorkspaceSchedulerHandle::try_new(pool, config, config_store, Arc::new(LogStore::new()))
+            .unwrap_or_else(|error| {
+                error!("初始化工作区调度器失败: {error}");
+                std::process::exit(1);
+            });
 
     spawn_refresh_task(&handle);
     serve(listen, handle).await;
@@ -44,17 +47,12 @@ async fn load_config(config_store: &ConfigStore) -> Config {
     })
 }
 
-fn log_pool_ready(pool: &KeyPool) {
-    let total_keys: usize = pool
-        .workspaces
-        .values()
-        .map(|workspace| workspace.keys.len())
-        .sum();
+fn log_pool_ready(pool: &WorkspaceScheduler) {
     let total_workspaces = pool.workspaces.len();
-    info!("KeyPool 就绪: {total_workspaces} 个 Go 工作区，{total_keys} 个 key");
+    info!("WorkspaceScheduler 就绪: {total_workspaces} 个 Go 工作区");
 }
 
-fn spawn_refresh_task(handle: &KeyPoolHandle) {
+fn spawn_refresh_task(handle: &WorkspaceSchedulerHandle) {
     let refresh_handle = handle.clone();
     tokio::spawn(async move {
         loop {
@@ -79,7 +77,7 @@ fn spawn_refresh_task(handle: &KeyPoolHandle) {
     });
 }
 
-async fn serve(listen: String, handle: KeyPoolHandle) {
+async fn serve(listen: String, handle: WorkspaceSchedulerHandle) {
     let addr: SocketAddr = listen.parse().unwrap_or_else(|error| {
         error!("无效的监听地址 '{listen}': {error}");
         std::process::exit(1);

@@ -4,10 +4,8 @@ use crate::business::status::dto::workspace::WorkspaceStatus;
 
 #[derive(Debug, Serialize)]
 pub struct DashboardStatusResponse {
-    /// 已发现的 key 总数，包含不可调度工作区里的 key。
-    pub total_keys: usize,
-    /// 可调度工作区里的 key 数量。
-    pub available_keys: usize,
+    /// 已发现的工作区总数。
+    pub total_workspaces: usize,
     /// 可调度工作区数量。
     pub available_workspaces: usize,
     /// 当前无额度的工作区数量。

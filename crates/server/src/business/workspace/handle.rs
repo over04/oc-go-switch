@@ -15,7 +15,7 @@ use crate::{
             client_set::ClientSet,
             discovery::discover,
             error::PoolError,
-            scheduler::{KeyPool, SelectedKey},
+            scheduler::{SelectedWorkspaceCredential, WorkspaceScheduler},
         },
     },
     common::{
@@ -29,11 +29,11 @@ use crate::{
 
 /// 工作区调度运行时句柄。
 ///
-/// 请求路径通过该类型读取配置快照、选择 key、刷新工作区和写入代理日志。
+/// 请求路径通过该类型读取配置快照、选择工作区凭证、刷新工作区和写入代理日志。
 /// 配置使用 `watch` 发布快照，避免请求路径共享写锁。
 #[derive(Debug, Clone)]
-pub struct KeyPoolHandle {
-    inner: Arc<RwLock<KeyPool>>,
+pub struct WorkspaceSchedulerHandle {
+    inner: Arc<RwLock<WorkspaceScheduler>>,
     fixed_config: Arc<FixedConfig>,
     config_runtime: ConfigRuntime,
     config_store: ConfigStore,
@@ -42,9 +42,9 @@ pub struct KeyPoolHandle {
     refresh_running: Arc<AtomicBool>,
 }
 
-impl KeyPoolHandle {
+impl WorkspaceSchedulerHandle {
     pub fn try_new(
-        pool: KeyPool,
+        pool: WorkspaceScheduler,
         config: Config,
         config_store: ConfigStore,
         log_store: Arc<LogStore>,
@@ -64,7 +64,7 @@ impl KeyPoolHandle {
         })
     }
 
-    pub async fn read(&self) -> RwLockReadGuard<'_, KeyPool> {
+    pub async fn read(&self) -> RwLockReadGuard<'_, WorkspaceScheduler> {
         self.inner.read().await
     }
 
@@ -97,15 +97,18 @@ impl KeyPoolHandle {
         self.config_runtime.changed().await;
     }
 
-    pub async fn set_active_key(&self, key_id: String) -> bool {
-        self.inner.write().await.set_active_key(&key_id)
+    pub async fn set_affinity_workspace(&self, workspace_id: String) -> bool {
+        self.inner
+            .write()
+            .await
+            .set_affinity_workspace(&workspace_id)
     }
 
-    pub async fn clear_active_key(&self) {
-        self.inner.write().await.clear_active_key();
+    pub async fn clear_affinity_workspace(&self) {
+        self.inner.write().await.clear_affinity_workspace();
     }
 
-    pub async fn select_key_or_refresh(&self) -> Option<SelectedKey> {
+    pub async fn select_credential_or_refresh(&self) -> Option<SelectedWorkspaceCredential> {
         let selected = self.inner.write().await.select();
         if selected.is_none() {
             self.request_refresh();
@@ -133,7 +136,11 @@ impl KeyPoolHandle {
         new_pool.last_refresh_at = Some(Utc::now().to_rfc3339());
         let count = new_pool.available_workspace_count();
 
-        *self.inner.write().await = new_pool;
+        let mut current_pool = self.inner.write().await;
+        if let Some(workspace_id) = current_pool.affinity_workspace_id.clone() {
+            new_pool.restore_affinity_workspace(&workspace_id);
+        }
+        *current_pool = new_pool;
         info!("池已刷新，{} 个 Go 工作区可用", count);
         Ok(true)
     }

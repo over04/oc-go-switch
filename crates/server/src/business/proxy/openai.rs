@@ -5,13 +5,16 @@ use tracing::{info, warn};
 use crate::{
     business::{
         proxy::{error, filter, quota, response, stream},
-        workspace::handle::KeyPoolHandle,
+        workspace::handle::WorkspaceSchedulerHandle,
     },
     common::model::{direction::Direction, log::LogEntry},
 };
 use adapter::openai::model::completion_request::OpenAiChatCompletionRequest;
 
-pub async fn chat_completions(State(handle): State<KeyPoolHandle>, body: Bytes) -> Response {
+pub async fn chat_completions(
+    State(handle): State<WorkspaceSchedulerHandle>,
+    body: Bytes,
+) -> Response {
     let start = std::time::Instant::now();
 
     let mut req: OpenAiChatCompletionRequest = match serde_json::from_slice(&body) {
@@ -56,8 +59,8 @@ pub async fn chat_completions(State(handle): State<KeyPoolHandle>, body: Bytes) 
     }
 
     for _attempt in 0..=max_retries {
-        let key = match handle.select_key_or_refresh().await {
-            Some(k) => k,
+        let credential = match handle.select_credential_or_refresh().await {
+            Some(credential) => credential,
             None => {
                 handle
                     .record_log(LogEntry {
@@ -66,7 +69,7 @@ pub async fn chat_completions(State(handle): State<KeyPoolHandle>, body: Bytes) 
                         model: Some(model.clone()),
                         status_code: 429,
                         duration_ms: start.elapsed().as_millis() as u64,
-                        key_masked: "-".into(),
+                        credential_masked: "-".into(),
                         success: false,
                         error_message: Some("没有可用 Go 工作区".into()),
                         stream: is_stream,
@@ -92,9 +95,9 @@ pub async fn chat_completions(State(handle): State<KeyPoolHandle>, body: Bytes) 
             }
         };
         info!(
-            "转发请求 key={} workspace={} 第{}次尝试",
-            key.masked_key(),
-            key.workspace_name,
+            "转发请求 credential={} workspace={} 第{}次尝试",
+            credential.masked_credential(),
+            credential.workspace_name,
             _attempt + 1,
         );
 
@@ -104,7 +107,7 @@ pub async fn chat_completions(State(handle): State<KeyPoolHandle>, body: Bytes) 
             .header(reqwest::header::ACCEPT_ENCODING, "identity")
             .header(
                 reqwest::header::AUTHORIZATION,
-                format!("Bearer {}", key.key_value),
+                format!("Bearer {}", credential.credential_value),
             )
             .header(reqwest::header::CONTENT_TYPE, "application/json")
             .body(upstream_bytes)
@@ -116,7 +119,7 @@ pub async fn chat_completions(State(handle): State<KeyPoolHandle>, body: Bytes) 
                 let status = r.status();
 
                 if status.is_success() {
-                    info!("请求成功 key={}", key.masked_key());
+                    info!("请求成功 credential={}", credential.masked_credential());
                     handle
                         .record_log(LogEntry {
                             timestamp: Utc::now().to_rfc3339(),
@@ -124,7 +127,7 @@ pub async fn chat_completions(State(handle): State<KeyPoolHandle>, body: Bytes) 
                             model: Some(model),
                             status_code: status.as_u16(),
                             duration_ms: start.elapsed().as_millis() as u64,
-                            key_masked: key.masked_key(),
+                            credential_masked: credential.masked_credential(),
                             success: true,
                             error_message: None,
                             stream: is_stream,
@@ -141,11 +144,11 @@ pub async fn chat_completions(State(handle): State<KeyPoolHandle>, body: Bytes) 
 
                 if quota::is_quota_exhausted(status, &resp_body) {
                     info!(
-                        "key 已耗尽 key={} status={} 切换中...",
-                        key.masked_key(),
+                        "工作区额度耗尽 credential={} status={} 切换中...",
+                        credential.masked_credential(),
                         status
                     );
-                    handle.drop_workspace(&key.workspace_id).await;
+                    handle.drop_workspace(&credential.workspace_id).await;
                     continue;
                 }
 
@@ -156,7 +159,7 @@ pub async fn chat_completions(State(handle): State<KeyPoolHandle>, body: Bytes) 
                         model: Some(model),
                         status_code: status.as_u16(),
                         duration_ms: start.elapsed().as_millis() as u64,
-                        key_masked: key.masked_key(),
+                        credential_masked: credential.masked_credential(),
                         success: false,
                         error_message: Some(resp_body.clone()),
                         stream: is_stream,
@@ -168,8 +171,11 @@ pub async fn chat_completions(State(handle): State<KeyPoolHandle>, body: Bytes) 
                 );
             }
             Err(e) => {
-                warn!("网络错误 key={}: {e}，切换 key...", key.masked_key());
-                handle.drop_workspace(&key.workspace_id).await;
+                warn!(
+                    "网络错误 credential={}: {e}，切换工作区...",
+                    credential.masked_credential()
+                );
+                handle.drop_workspace(&credential.workspace_id).await;
                 handle
                     .record_log(LogEntry {
                         timestamp: Utc::now().to_rfc3339(),
@@ -177,7 +183,7 @@ pub async fn chat_completions(State(handle): State<KeyPoolHandle>, body: Bytes) 
                         model: Some(model.clone()),
                         status_code: 502,
                         duration_ms: start.elapsed().as_millis() as u64,
-                        key_masked: key.masked_key(),
+                        credential_masked: credential.masked_credential(),
                         success: false,
                         error_message: Some(format!("{e}")),
                         stream: is_stream,
@@ -195,15 +201,15 @@ pub async fn chat_completions(State(handle): State<KeyPoolHandle>, body: Bytes) 
             model: Some(model),
             status_code: 429,
             duration_ms: start.elapsed().as_millis() as u64,
-            key_masked: "-".into(),
+            credential_masked: "-".into(),
             success: false,
-            error_message: Some("重试耗尽，所有 API key 不可用".into()),
+            error_message: Some("重试耗尽，所有工作区不可用".into()),
             stream: is_stream,
         })
         .await;
     error::openai_error(
         StatusCode::TOO_MANY_REQUESTS,
-        "重试耗尽，所有 API key 不可用",
+        "重试耗尽，所有工作区不可用",
         "server_error",
         None,
         None,

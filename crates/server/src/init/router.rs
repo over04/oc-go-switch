@@ -4,7 +4,7 @@ use tower_http::cors::CorsLayer;
 use crate::{
     business::{
         account, configuration, log, model_catalog, proxy::router as proxy_router, status,
-        workspace::handle::KeyPoolHandle,
+        workspace::handle::WorkspaceSchedulerHandle,
     },
     common::{auth::middleware::admin_auth_middleware, frontend::assets::serve_frontend},
 };
@@ -12,7 +12,7 @@ use crate::{
 /// 应用路由聚合层。
 ///
 /// 功能域 router 只声明局部路径；这里统一挂载 `/api`、协议入口和前端 fallback。
-pub fn build_router(pool_handle: KeyPoolHandle) -> Router {
+pub fn build_router(pool_handle: WorkspaceSchedulerHandle) -> Router {
     let api_router = Router::new()
         .merge(account::router::router())
         .merge(configuration::router::router())

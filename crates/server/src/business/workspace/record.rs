@@ -1,8 +1,6 @@
-use std::collections::VecDeque;
-
 use adapter::opencode::model::{go_usage::GoUsage, subscription_plan::SubscriptionPlan};
 
-use crate::business::workspace::{key::PoolKey, status::WorkspacePoolStatus};
+use crate::business::workspace::{credential::WorkspaceCredential, status::WorkspacePoolStatus};
 
 #[derive(Debug, Clone)]
 pub struct WorkspacePool {
@@ -20,8 +18,8 @@ pub struct WorkspacePool {
     pub plan: Option<SubscriptionPlan>,
     /// Go 用量，只有 Go 订阅工作区才会存在。
     pub go_usage: Option<GoUsage>,
-    /// 工作区内 key 队列；额度仍以工作区为单位共享。
-    pub keys: VecDeque<PoolKey>,
+    /// 工作区代理凭证；同一工作区内 OpenCode key 共享额度，调度只保存一个凭证。
+    pub credential: WorkspaceCredential,
 }
 
 impl WorkspacePool {

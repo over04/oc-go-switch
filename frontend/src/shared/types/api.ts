@@ -1,4 +1,3 @@
-export type KeyStatus = "active" | "idle";
 export type WorkspaceStatusKind = "available" | "exhausted" | "unsubscribed";
 
 export interface GoUsage {
@@ -10,21 +9,16 @@ export interface GoUsage {
   monthly_reset_sec: number;
 }
 
-export interface KeyStatusEntry {
-  id: string;
-  masked: string;
-  status: KeyStatus;
-}
-
 export interface WorkspaceStatus {
   id: string;
   name: string;
   status: WorkspaceStatusKind;
   is_current: boolean;
+  is_affinity: boolean;
   queue_position: number | null;
   plan: string | null;
   go_usage: GoUsage | null;
-  keys: KeyStatusEntry[];
+  credential_masked: string;
 }
 
 export interface AccountStatus {
@@ -34,14 +28,13 @@ export interface AccountStatus {
 }
 
 export interface WorkspaceScheduleResponse {
-  current_key_id: string | null;
+  affinity_workspace_id: string | null;
   last_refresh_at: string | null;
   accounts: AccountStatus[];
 }
 
 export interface DashboardStatusResponse {
-  total_keys: number;
-  available_keys: number;
+  total_workspaces: number;
   available_workspaces: number;
   exhausted_workspaces: number;
   unsubscribed_workspaces: number;
@@ -120,7 +113,7 @@ export interface LogEntry {
   model: string | null;
   status_code: number;
   duration_ms: number;
-  key_masked: string;
+  credential_masked: string;
   success: boolean;
   error_message: string | null;
 }
