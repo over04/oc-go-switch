@@ -23,9 +23,13 @@ pub struct WorkspacePool {
 }
 
 impl WorkspacePool {
-    pub fn usage_rank(&self) -> u32 {
-        self.go_usage
-            .as_ref()
-            .map_or(u32::MAX, GoUsage::peak_percent)
+    pub fn usage_priority(&self) -> (u32, u32, u32) {
+        self.go_usage.as_ref().map_or((0, 0, 0), |usage| {
+            (
+                usage.monthly_percent,
+                usage.weekly_percent,
+                usage.hourly_percent,
+            )
+        })
     }
 }

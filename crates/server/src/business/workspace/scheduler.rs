@@ -1,4 +1,7 @@
-use std::collections::{HashMap, VecDeque};
+use std::{
+    cmp::Reverse,
+    collections::{HashMap, VecDeque},
+};
 
 use crate::business::workspace::{
     credential::WorkspaceCredential, record::WorkspacePool, status::WorkspacePoolStatus,
@@ -37,9 +40,11 @@ impl WorkspaceScheduler {
             .map(|(id, _)| id.clone())
             .collect();
         workspace_queue.make_contiguous().sort_by_key(|id| {
-            workspaces
-                .get(id)
-                .map_or(u32::MAX, WorkspacePool::usage_rank)
+            Reverse(
+                workspaces
+                    .get(id)
+                    .map_or((0, 0, 0), WorkspacePool::usage_priority),
+            )
         });
 
         Self {
@@ -150,6 +155,26 @@ mod tests {
     }
 
     #[test]
+    fn queue_prioritizes_lowest_remaining_quota_by_month_week_hour() {
+        let pool = WorkspaceScheduler::new(HashMap::from([
+            workspace_with_usage("month-high", WorkspacePoolStatus::Available, 10, 20, 80),
+            workspace_with_usage("week-high", WorkspacePoolStatus::Available, 10, 90, 70),
+            workspace_with_usage("hour-high", WorkspacePoolStatus::Available, 90, 80, 70),
+            workspace_with_usage("hour-ignored", WorkspacePoolStatus::Available, 99, 70, 70),
+        ]));
+
+        assert_eq!(
+            pool.workspace_queue,
+            VecDeque::from([
+                "month-high".to_string(),
+                "week-high".to_string(),
+                "hour-high".to_string(),
+                "hour-ignored".to_string(),
+            ])
+        );
+    }
+
+    #[test]
     fn select_uses_queue_when_current_is_empty() {
         let mut pool = WorkspaceScheduler::new(HashMap::from([
             workspace("workspace-a", WorkspacePoolStatus::Available, 20),
@@ -160,8 +185,8 @@ mod tests {
         pool.clear_current_workspace();
         let second = pool.select().expect("available workspace should select");
 
-        assert_eq!(first.workspace_id, "workspace-b");
-        assert_eq!(second.workspace_id, "workspace-a");
+        assert_eq!(first.workspace_id, "workspace-a");
+        assert_eq!(second.workspace_id, "workspace-b");
     }
 
     #[test]
@@ -181,9 +206,9 @@ mod tests {
 
         assert_eq!(
             selected_workspaces,
-            vec!["workspace-b", "workspace-b", "workspace-b", "workspace-b"]
+            vec!["workspace-a", "workspace-a", "workspace-a", "workspace-a"]
         );
-        assert_eq!(pool.current_workspace_id.as_deref(), Some("workspace-b"));
+        assert_eq!(pool.current_workspace_id.as_deref(), Some("workspace-a"));
     }
 
     #[test]
@@ -254,6 +279,16 @@ mod tests {
         status: WorkspacePoolStatus,
         usage: u32,
     ) -> (String, WorkspacePool) {
+        workspace_with_usage(id, status, usage, usage, usage)
+    }
+
+    fn workspace_with_usage(
+        id: &'static str,
+        status: WorkspacePoolStatus,
+        hourly_usage: u32,
+        weekly_usage: u32,
+        monthly_usage: u32,
+    ) -> (String, WorkspacePool) {
         let id = id.to_string();
         (
             id.clone(),
@@ -265,11 +300,11 @@ mod tests {
                 status,
                 plan: Some(SubscriptionPlan::Go),
                 go_usage: Some(GoUsage {
-                    hourly_percent: usage,
+                    hourly_percent: hourly_usage,
                     hourly_reset_sec: 1,
-                    weekly_percent: usage,
+                    weekly_percent: weekly_usage,
                     weekly_reset_sec: 1,
-                    monthly_percent: usage,
+                    monthly_percent: monthly_usage,
                     monthly_reset_sec: 1,
                 }),
                 credential: WorkspaceCredential {
