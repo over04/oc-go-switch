@@ -59,18 +59,18 @@ export function editAccount(
   });
 }
 
-export function setAffinityWorkspace(
+export function setCurrentWorkspace(
   workspaceId: string,
 ): Promise<{ status: string }> {
-  return fetchJson<{ status: string }>("/api/workspaces/affinity", {
+  return fetchJson<{ status: string }>("/api/workspaces/current", {
     method: "PUT",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ workspace_id: workspaceId }),
   });
 }
 
-export function clearAffinityWorkspace(): Promise<{ status: string }> {
-  return fetchJson<{ status: string }>("/api/workspaces/affinity", {
+export function clearCurrentWorkspace(): Promise<{ status: string }> {
+  return fetchJson<{ status: string }>("/api/workspaces/current", {
     method: "DELETE",
   });
 }

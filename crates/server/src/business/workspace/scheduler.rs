@@ -12,7 +12,6 @@ use crate::business::workspace::{
 pub struct WorkspaceScheduler {
     pub workspaces: HashMap<String, WorkspacePool>,
     pub workspace_queue: VecDeque<String>,
-    pub affinity_workspace_id: Option<String>,
     pub current_workspace_id: Option<String>,
     pub last_refresh_at: Option<String>,
 }
@@ -46,7 +45,6 @@ impl WorkspaceScheduler {
         Self {
             workspaces,
             workspace_queue,
-            affinity_workspace_id: None,
             current_workspace_id: None,
             last_refresh_at: None,
         }
@@ -57,13 +55,13 @@ impl WorkspaceScheduler {
     }
 
     pub fn select(&mut self) -> Option<SelectedWorkspaceCredential> {
-        if let Some(workspace_id) = self.affinity_workspace_id.clone() {
+        if let Some(workspace_id) = self.current_workspace_id.clone() {
             if self.is_available_workspace(&workspace_id) {
                 if let Some(selected) = self.select_from_workspace(&workspace_id) {
                     return Some(selected);
                 }
             }
-            self.affinity_workspace_id = None;
+            self.current_workspace_id = None;
         }
 
         let workspace_id = self.workspace_queue.pop_front()?;
@@ -72,39 +70,28 @@ impl WorkspaceScheduler {
         Some(selected)
     }
 
-    pub fn restore_affinity_workspace(&mut self, workspace_id: &str) -> bool {
+    pub fn restore_current_workspace(&mut self, workspace_id: &str) -> bool {
         if !self.is_available_workspace(workspace_id) {
-            self.affinity_workspace_id = None;
+            self.current_workspace_id = None;
             return false;
         }
 
-        self.affinity_workspace_id = Some(workspace_id.to_string());
-        self.move_workspace_front(workspace_id);
-        true
-    }
-
-    pub fn set_affinity_workspace(&mut self, workspace_id: &str) -> bool {
-        if !self.is_available_workspace(workspace_id) {
-            return false;
-        }
-
-        self.affinity_workspace_id = Some(workspace_id.to_string());
         self.current_workspace_id = Some(workspace_id.to_string());
         self.move_workspace_front(workspace_id);
         true
     }
 
-    pub fn clear_affinity_workspace(&mut self) {
-        self.affinity_workspace_id = None;
+    pub fn set_current_workspace(&mut self, workspace_id: &str) -> bool {
+        self.restore_current_workspace(workspace_id)
+    }
+
+    pub fn clear_current_workspace(&mut self) {
         self.current_workspace_id = None;
     }
 
     pub fn drop_workspace(&mut self, workspace_id: &str) -> bool {
         self.workspaces.remove(workspace_id);
         self.workspace_queue.retain(|id| id != workspace_id);
-        if self.affinity_workspace_id.as_deref() == Some(workspace_id) {
-            self.affinity_workspace_id = None;
-        }
         if self.current_workspace_id.as_deref() == Some(workspace_id) {
             self.current_workspace_id = None;
         }
@@ -163,13 +150,14 @@ mod tests {
     }
 
     #[test]
-    fn select_rotates_workspaces() {
+    fn select_uses_queue_when_current_is_empty() {
         let mut pool = WorkspaceScheduler::new(HashMap::from([
             workspace("workspace-a", WorkspacePoolStatus::Available, 20),
             workspace("workspace-b", WorkspacePoolStatus::Available, 10),
         ]));
 
         let first = pool.select().expect("available workspace should select");
+        pool.clear_current_workspace();
         let second = pool.select().expect("available workspace should select");
 
         assert_eq!(first.workspace_id, "workspace-b");
@@ -177,39 +165,37 @@ mod tests {
     }
 
     #[test]
-    fn set_affinity_workspace_sticks_to_workspace() {
+    fn select_sticks_to_current_workspace() {
         let mut pool = WorkspaceScheduler::new(HashMap::from([
             workspace("workspace-a", WorkspacePoolStatus::Available, 20),
             workspace("workspace-b", WorkspacePoolStatus::Available, 10),
         ]));
 
-        assert!(pool.set_affinity_workspace("workspace-a"));
-
         let selected_workspaces: Vec<String> = (0..4)
             .map(|_| {
                 pool.select()
-                    .expect("affinity workspace should select")
+                    .expect("current workspace should select")
                     .workspace_id
             })
             .collect();
 
         assert_eq!(
             selected_workspaces,
-            vec!["workspace-a", "workspace-a", "workspace-a", "workspace-a"]
+            vec!["workspace-b", "workspace-b", "workspace-b", "workspace-b"]
         );
-        assert_eq!(pool.affinity_workspace_id.as_deref(), Some("workspace-a"));
+        assert_eq!(pool.current_workspace_id.as_deref(), Some("workspace-b"));
     }
 
     #[test]
-    fn restore_affinity_keeps_available_workspace_at_front() {
+    fn restore_current_keeps_available_workspace_at_front() {
         let mut pool = WorkspaceScheduler::new(HashMap::from([
             workspace("workspace-a", WorkspacePoolStatus::Available, 50),
             workspace("workspace-b", WorkspacePoolStatus::Available, 10),
         ]));
 
-        assert!(pool.restore_affinity_workspace("workspace-a"));
+        assert!(pool.restore_current_workspace("workspace-a"));
 
-        assert_eq!(pool.affinity_workspace_id.as_deref(), Some("workspace-a"));
+        assert_eq!(pool.current_workspace_id.as_deref(), Some("workspace-a"));
         assert_eq!(
             pool.workspace_queue.front().map(String::as_str),
             Some("workspace-a")
@@ -217,16 +203,16 @@ mod tests {
     }
 
     #[test]
-    fn restore_affinity_clears_unavailable_workspace() {
+    fn restore_current_clears_unavailable_workspace() {
         let mut pool = WorkspaceScheduler::new(HashMap::from([
             workspace("workspace-a", WorkspacePoolStatus::Exhausted, 100),
             workspace("workspace-b", WorkspacePoolStatus::Available, 10),
         ]));
-        pool.affinity_workspace_id = Some("workspace-a".to_string());
+        pool.current_workspace_id = Some("workspace-a".to_string());
 
-        assert!(!pool.restore_affinity_workspace("workspace-a"));
+        assert!(!pool.restore_current_workspace("workspace-a"));
 
-        assert_eq!(pool.affinity_workspace_id, None);
+        assert_eq!(pool.current_workspace_id, None);
         assert_eq!(
             pool.workspace_queue.front().map(String::as_str),
             Some("workspace-b")
@@ -234,16 +220,15 @@ mod tests {
     }
 
     #[test]
-    fn drop_workspace_clears_workspace_affinity() {
+    fn drop_workspace_clears_current_workspace() {
         let mut pool = WorkspaceScheduler::new(HashMap::from([
             workspace("workspace-a", WorkspacePoolStatus::Available, 20),
             workspace("workspace-b", WorkspacePoolStatus::Available, 10),
         ]));
-        assert!(pool.set_affinity_workspace("workspace-a"));
+        pool.current_workspace_id = Some("workspace-a".to_string());
 
         assert!(!pool.drop_workspace("workspace-a"));
 
-        assert_eq!(pool.affinity_workspace_id, None);
         assert_eq!(pool.current_workspace_id, None);
         assert_eq!(
             pool.workspace_queue,

@@ -18,10 +18,8 @@ export function WorkspaceSection({ workspace }: WorkspaceSectionProps) {
         </Badge>
         <Badge size="xs" tone={workspace.status === "available" ? "success" : workspace.status === "exhausted" ? "danger" : "default"}>
           {workspace.status === "available"
-            ? workspace.is_affinity
-              ? "亲和中"
-              : workspace.is_current
-                ? "最近使用"
+            ? workspace.is_current
+                ? "当前通道"
               : `可用 #${workspace.queue_position ?? "-"}`
             : workspace.status === "exhausted"
               ? "当前无额度"

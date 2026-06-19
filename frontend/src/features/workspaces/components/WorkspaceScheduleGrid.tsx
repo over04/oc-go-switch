@@ -11,8 +11,8 @@ import type {
 
 interface WorkspaceScheduleGridProps {
   accounts: AccountStatus[];
-  affinityWorkspaceId: string | null;
-  onSetAffinity: (workspaceId: string) => void;
+  currentWorkspaceId: string | null;
+  onSetCurrent: (workspaceId: string) => void;
   search: string;
   workspaceFilter: WorkspaceStatusKind | "all";
 }
@@ -44,8 +44,8 @@ function matchesSearch(
 
 export function WorkspaceScheduleGrid({
   accounts,
-  affinityWorkspaceId,
-  onSetAffinity,
+  currentWorkspaceId,
+  onSetCurrent,
   search,
   workspaceFilter,
 }: WorkspaceScheduleGridProps) {
@@ -53,7 +53,7 @@ export function WorkspaceScheduleGrid({
     const s = new Set<string>();
     for (const acct of accounts) {
       for (const ws of acct.workspaces) {
-        if (ws.id === affinityWorkspaceId || ws.is_current) {
+        if (ws.id === currentWorkspaceId || ws.is_current) {
           s.add(ws.id);
         }
       }
@@ -92,8 +92,7 @@ export function WorkspaceScheduleGrid({
               }
 
               const isExpanded = expanded.has(ws.id);
-              const hasAffinity = ws.id === affinityWorkspaceId;
-              const canSchedule = ws.status === "available";
+              const isCurrent = ws.id === currentWorkspaceId || ws.is_current;
 
               return (
                 <motion.div
@@ -103,7 +102,7 @@ export function WorkspaceScheduleGrid({
                   transition={{ delay: wi * 0.04, duration: 0.3 }}
                   className={clsx(
                     "bg-white rounded-mcm-lg border shadow-mcm overflow-hidden transition-shadow duration-200 hover:shadow-mcm-md",
-                    hasAffinity
+                    isCurrent
                       ? "border-terra-500/30"
                       : "border-cream-200",
                   )}
@@ -127,10 +126,8 @@ export function WorkspaceScheduleGrid({
                         {ws.status === "unsubscribed" ? "无订阅" : "Go"}
                       </Badge>
                       <Badge size="xs" tone={workspaceTone[ws.status]}>
-                        {ws.status === "available" && ws.is_affinity
-                          ? "亲和中"
-                          : ws.status === "available" && ws.is_current
-                            ? "最近使用"
+                        {ws.status === "available" && isCurrent
+                            ? "当前通道"
                             : ws.status === "available"
                               ? `可用 #${ws.queue_position ?? "-"}`
                               : workspaceLabel[ws.status]}
@@ -178,26 +175,26 @@ export function WorkspaceScheduleGrid({
                           </code>
                         </div>
 
-                        {!hasAffinity && canSchedule && (
+                        {!isCurrent && ws.status === "available" && (
                           <Button
                             size="xs"
                             tone="primary"
                             onClick={(e) => {
                               e.stopPropagation();
-                              onSetAffinity(ws.id);
+                              onSetCurrent(ws.id);
                             }}
                           >
-                            设为亲和
+                            设为当前通道
                           </Button>
                         )}
-                        {!hasAffinity && !canSchedule && (
+                        {!isCurrent && ws.status !== "available" && (
                           <span className="text-[0.625rem] text-espresso-300">
                             不参与调度
                           </span>
                         )}
-                        {hasAffinity && (
+                        {isCurrent && (
                           <span className="text-xs text-terra-500 font-semibold">
-                            亲和工作区
+                            当前通道工作区
                           </span>
                         )}
                       </div>

@@ -42,7 +42,7 @@ async fn workspace_status_exposes_workspace_level_schedule(
     assert_eq!(response.status(), StatusCode::OK);
     let body = json_body(response).await?;
 
-    assert_eq!(body["affinity_workspace_id"], Value::Null);
+    assert_eq!(body["current_workspace_id"], Value::Null);
     assert_eq!(body["accounts"][0]["name"], "acct");
     assert_eq!(
         body["accounts"][0]["workspaces"][0]["id"],
@@ -59,7 +59,7 @@ async fn workspace_status_exposes_workspace_level_schedule(
 }
 
 #[tokio::test]
-async fn affinity_endpoint_accepts_plain_workspace_id() -> Result<(), Box<dyn std::error::Error>> {
+async fn current_endpoint_accepts_plain_workspace_id() -> Result<(), Box<dyn std::error::Error>> {
     let app = Router::new()
         .nest("/workspaces", workspace_router())
         .with_state(handle()?);
@@ -69,7 +69,7 @@ async fn affinity_endpoint_accepts_plain_workspace_id() -> Result<(), Box<dyn st
         .oneshot(
             Request::builder()
                 .method("PUT")
-                .uri("/workspaces/affinity")
+                .uri("/workspaces/current")
                 .header("content-type", "application/json")
                 .body(Body::from(
                     json!({"workspace_id": "acct/workspace-b"}).to_string(),
@@ -90,19 +90,18 @@ async fn affinity_endpoint_accepts_plain_workspace_id() -> Result<(), Box<dyn st
         .await?;
     let body = json_body(response).await?;
 
-    assert_eq!(body["affinity_workspace_id"], "acct/workspace-b");
+    assert_eq!(body["current_workspace_id"], "acct/workspace-b");
     let workspace_b = body["accounts"][0]["workspaces"]
         .as_array()
         .and_then(|items| items.iter().find(|item| item["id"] == "acct/workspace-b"))
         .expect("workspace-b should be present");
-    assert_eq!(workspace_b["is_affinity"], true);
     assert_eq!(workspace_b["is_current"], true);
 
     let response = app
         .oneshot(
             Request::builder()
                 .method("DELETE")
-                .uri("/workspaces/affinity")
+                .uri("/workspaces/current")
                 .body(Body::empty())?,
         )
         .await?;

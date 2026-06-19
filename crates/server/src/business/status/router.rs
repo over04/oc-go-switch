@@ -20,6 +20,6 @@ pub fn workspace_router() -> Router<WorkspaceSchedulerHandle> {
     Router::new()
         .route("/status", get(handler::workspace_schedule))
         .route("/refresh", post(handler::force_refresh))
-        .route("/affinity", put(handler::set_affinity_workspace))
-        .route("/affinity", delete(handler::clear_affinity_workspace))
+        .route("/current", put(handler::set_current_workspace))
+        .route("/current", delete(handler::clear_current_workspace))
 }

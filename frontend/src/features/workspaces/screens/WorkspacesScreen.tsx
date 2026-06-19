@@ -5,15 +5,14 @@ import {
   useWorkspaceSchedule,
   WORKSPACE_SCHEDULE_KEY,
 } from "@/features/workspaces/logic/useWorkspaceSchedule";
-import { AffinityWorkspaceBar } from "../components/AffinityWorkspaceBar";
 import { WorkspaceScheduleGrid } from "../components/WorkspaceScheduleGrid";
 import { WorkspaceFilterBar } from "../components/WorkspaceFilterBar";
 import { Skeleton } from "@/shared/ui/Skeleton";
 import { Button } from "@/shared/ui/Button";
 import {
-  setAffinityWorkspace,
-  clearAffinityWorkspace,
+  clearCurrentWorkspace,
   refreshWorkspaces,
+  setCurrentWorkspace,
 } from "@/features/settings/service/settingsService";
 import { toastSuccess, toastError } from "@/shared/lib/toast";
 import type { WorkspaceStatusKind } from "@/shared/types/api";
@@ -25,12 +24,12 @@ export function WorkspacesScreen() {
   const [search, setSearch] = useState("");
   const [workspaceFilter, setWorkspaceFilter] = useState<WorkspaceStatusKind | "all">("all");
 
-  const handleSetAffinity = useCallback(
+  const handleSetCurrent = useCallback(
     async (workspaceId: string) => {
       try {
-        await setAffinityWorkspace(workspaceId);
+        await setCurrentWorkspace(workspaceId);
         await queryClient.invalidateQueries({ queryKey: WORKSPACE_SCHEDULE_KEY });
-        toastSuccess("已设置亲和工作区");
+        toastSuccess("已切换当前通道");
       } catch (e) {
         toastError(e instanceof Error ? e.message : "切换失败");
       }
@@ -38,11 +37,11 @@ export function WorkspacesScreen() {
     [queryClient],
   );
 
-  const handleClearAffinity = useCallback(async () => {
+  const handleClearCurrent = useCallback(async () => {
     try {
-      await clearAffinityWorkspace();
+      await clearCurrentWorkspace();
       await queryClient.invalidateQueries({ queryKey: WORKSPACE_SCHEDULE_KEY });
-      toastSuccess("已清除亲和工作区");
+      toastSuccess("已清空当前通道");
     } catch (e) {
       toastError(e instanceof Error ? e.message : "操作失败");
     }
@@ -76,10 +75,10 @@ export function WorkspacesScreen() {
     );
 
   const goAccounts = data.accounts.filter((a) => a.workspaces.length > 0);
-  const affinityWorkspaceName =
+  const currentWorkspaceName =
     goAccounts
       .flatMap((account) => account.workspaces)
-      .find((workspace) => workspace.id === data.affinity_workspace_id)?.name ??
+      .find((workspace) => workspace.id === data.current_workspace_id)?.name ??
     null;
 
   return (
@@ -106,10 +105,19 @@ export function WorkspacesScreen() {
         </Button>
       </div>
 
-      <AffinityWorkspaceBar
-        affinityWorkspaceName={affinityWorkspaceName}
-        onClear={handleClearAffinity}
-      />
+      {currentWorkspaceName && (
+        <div className="flex flex-wrap items-center gap-2 sm:gap-3 bg-terra-500/5 border border-terra-500/15 rounded-mcm-lg px-3 md:px-4 py-2.5">
+          <span className="text-xs text-espresso-500 font-medium">
+            当前通道
+          </span>
+          <code className="text-sm font-mono font-semibold text-terra-500 bg-terra-500/5 px-2 py-0.5 rounded-full">
+            {currentWorkspaceName}
+          </code>
+          <Button size="xs" tone="default" onClick={handleClearCurrent}>
+            清空当前通道
+          </Button>
+        </div>
+      )}
 
       <WorkspaceFilterBar
         search={search}
@@ -132,8 +140,8 @@ export function WorkspacesScreen() {
       ) : (
         <WorkspaceScheduleGrid
           accounts={goAccounts}
-          affinityWorkspaceId={data.affinity_workspace_id}
-          onSetAffinity={handleSetAffinity}
+          currentWorkspaceId={data.current_workspace_id}
+          onSetCurrent={handleSetCurrent}
           search={search}
           workspaceFilter={workspaceFilter}
         />

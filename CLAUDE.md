@@ -33,7 +33,7 @@ The frontend dist is embedded into the Rust binary via `rust-embed` (`src/api/ro
 **`workspace/`** — Workspace-level scheduling:
 - `credential.rs` — `WorkspaceCredential` stores the single upstream credential retained for a workspace and exposes masked display helpers.
 - `record.rs` — `WorkspacePool` stores workspace identity, account identity, subscription state, Go usage, and one `WorkspaceCredential`.
-- `scheduler.rs` — `WorkspaceScheduler` schedules available workspaces, preserves workspace affinity, rotates by workspace usage, and returns `SelectedWorkspaceCredential` for proxy requests.
+- `scheduler.rs` — `WorkspaceScheduler` schedules available workspaces, keeps the current workspace sticky while it remains usable, and returns `SelectedWorkspaceCredential` for proxy requests.
 - `handle.rs` — `WorkspaceSchedulerHandle` owns the runtime scheduler, configuration snapshots, refresh guard, upstream clients, and request logs.
 - `discovery.rs` — discovers accounts and workspaces, reads each workspace key list, and keeps the first key as the workspace proxy credential.
 
@@ -64,7 +64,7 @@ Workspace is the quota boundary. One account can have multiple workspaces, and w
 React 19 SPA, embedded in Rust binary. Uses Tailwind (custom cream/espresso/terra/harvest palette), framer-motion animations, TanStack Query for data fetching.
 
 - `features/dashboard/` — Workspace stats + Go usage overview
-- `features/workspaces/` — Workspace scheduling view with search/filter and affinity workspace controls
+- `features/workspaces/` — Workspace scheduling view with search/filter and current channel controls
 - `features/models/` — Model list by provider (OpenAI/Claude tabs)
 - `features/logs/` — Request log table with protocol/success filters
 - `features/accounts/` — Account CRUD with workspace sections
@@ -77,7 +77,7 @@ React 19 SPA, embedded in Rust binary. Uses Tailwind (custom cream/espresso/terr
 
 1. **Upstream API response** — authoritative for quota exhaustion (402/429 + specific keywords: `insufficient`, `quota`, `balance` only — NOT `exceeded`, `rate_limit`, or `overloaded_error`)
 2. **Go usage data** (`go_usage`) — scraped from OpenCode workspace Go page, used for workspace scheduling and exhaustion detection
-3. **Memory cache** — workspace queue, affinity workspace, current workspace — refreshed asynchronously, overridden by API signals
+3. **Memory cache** — workspace queue and current workspace — refreshed asynchronously, overridden by API signals
 
 ### Config (`config.yaml`)
 

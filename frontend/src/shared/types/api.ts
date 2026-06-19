@@ -14,7 +14,6 @@ export interface WorkspaceStatus {
   name: string;
   status: WorkspaceStatusKind;
   is_current: boolean;
-  is_affinity: boolean;
   queue_position: number | null;
   plan: string | null;
   go_usage: GoUsage | null;
@@ -28,7 +27,7 @@ export interface AccountStatus {
 }
 
 export interface WorkspaceScheduleResponse {
-  affinity_workspace_id: string | null;
+  current_workspace_id: string | null;
   last_refresh_at: string | null;
   accounts: AccountStatus[];
 }

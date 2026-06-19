@@ -13,8 +13,6 @@ pub struct WorkspaceStatus {
     pub status: WorkspaceQueueStatus,
     /// 当前最近一次请求是否使用该工作区。
     pub is_current: bool,
-    /// 当前是否为亲和调度工作区。
-    pub is_affinity: bool,
     /// 在调度队列中的位置；无值表示当前不参与调度。
     pub queue_position: Option<usize>,
     /// OpenCode 订阅计划展示值。

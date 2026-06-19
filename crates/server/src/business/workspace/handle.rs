@@ -97,15 +97,15 @@ impl WorkspaceSchedulerHandle {
         self.config_runtime.changed().await;
     }
 
-    pub async fn set_affinity_workspace(&self, workspace_id: String) -> bool {
+    pub async fn set_current_workspace(&self, workspace_id: String) -> bool {
         self.inner
             .write()
             .await
-            .set_affinity_workspace(&workspace_id)
+            .set_current_workspace(&workspace_id)
     }
 
-    pub async fn clear_affinity_workspace(&self) {
-        self.inner.write().await.clear_affinity_workspace();
+    pub async fn clear_current_workspace(&self) {
+        self.inner.write().await.clear_current_workspace();
     }
 
     pub async fn select_credential_or_refresh(&self) -> Option<SelectedWorkspaceCredential> {
@@ -137,8 +137,8 @@ impl WorkspaceSchedulerHandle {
         let count = new_pool.available_workspace_count();
 
         let mut current_pool = self.inner.write().await;
-        if let Some(workspace_id) = current_pool.affinity_workspace_id.clone() {
-            new_pool.restore_affinity_workspace(&workspace_id);
+        if let Some(workspace_id) = current_pool.current_workspace_id.clone() {
+            new_pool.restore_current_workspace(&workspace_id);
         }
         *current_pool = new_pool;
         info!("池已刷新，{} 个 Go 工作区可用", count);

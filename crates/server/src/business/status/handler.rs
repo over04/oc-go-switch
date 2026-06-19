@@ -4,7 +4,7 @@ use crate::business::{
     status::{
         dto::{
             account::AccountStatus,
-            affinity::{AffinityActionResponse, SetAffinityWorkspaceRequest},
+            current::{CurrentWorkspaceActionResponse, SetCurrentWorkspaceRequest},
             dashboard::DashboardStatusResponse,
             schedule::WorkspaceScheduleResponse,
             workspace::WorkspaceStatus,
@@ -62,28 +62,28 @@ pub async fn workspace_schedule(
     let pool = handle.read().await;
 
     Json(WorkspaceScheduleResponse {
-        affinity_workspace_id: pool.affinity_workspace_id.clone(),
+        current_workspace_id: pool.current_workspace_id.clone(),
         last_refresh_at: pool.last_refresh_at.clone(),
         accounts: account_status_entries(&pool),
     })
 }
 
-pub async fn set_affinity_workspace(
+pub async fn set_current_workspace(
     State(handle): State<WorkspaceSchedulerHandle>,
-    Json(req): Json<SetAffinityWorkspaceRequest>,
-) -> Result<Json<AffinityActionResponse>, StatusCode> {
-    if !handle.set_affinity_workspace(req.workspace_id).await {
+    Json(req): Json<SetCurrentWorkspaceRequest>,
+) -> Result<Json<CurrentWorkspaceActionResponse>, StatusCode> {
+    if !handle.set_current_workspace(req.workspace_id).await {
         return Err(StatusCode::NOT_FOUND);
     }
 
-    Ok(Json(AffinityActionResponse { status: "ok" }))
+    Ok(Json(CurrentWorkspaceActionResponse { status: "ok" }))
 }
 
-pub async fn clear_affinity_workspace(
+pub async fn clear_current_workspace(
     State(handle): State<WorkspaceSchedulerHandle>,
-) -> Json<AffinityActionResponse> {
-    handle.clear_affinity_workspace().await;
-    Json(AffinityActionResponse { status: "ok" })
+) -> Json<CurrentWorkspaceActionResponse> {
+    handle.clear_current_workspace().await;
+    Json(CurrentWorkspaceActionResponse { status: "ok" })
 }
 
 fn account_status_entries(pool: &WorkspaceScheduler) -> Vec<AccountStatus> {
@@ -127,7 +127,6 @@ fn workspace_status_entry(pool: &WorkspaceScheduler, workspace: &WorkspacePool) 
         name: workspace.name.clone(),
         status: workspace_status(workspace),
         is_current: pool.current_workspace_id.as_deref() == Some(workspace.id.as_str()),
-        is_affinity: pool.affinity_workspace_id.as_deref() == Some(workspace.id.as_str()),
         queue_position: queue_position(pool, &workspace.id),
         plan: workspace.plan.map(|p| format!("{:?}", p)),
         go_usage: workspace.go_usage.clone(),

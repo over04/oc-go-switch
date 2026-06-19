@@ -1,5 +1,5 @@
 pub mod account;
-pub mod affinity;
+pub mod current;
 pub mod dashboard;
 pub mod schedule;
 pub mod workspace;
